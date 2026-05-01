@@ -55,6 +55,7 @@ func New(opts Options) http.Handler {
 			_, _ = w.Write([]byte(`{"data":{"message":"Mnemoniqa API"},"meta":{}}`))
 		})
 		r.Get("/plans", billH.ListPlans)
+		r.Get("/token-packages", billH.ListTokenPackagesPublic)
 
 		r.Post("/auth/register", authH.Register)
 		r.Post("/auth/login", authH.Login)

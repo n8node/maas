@@ -38,6 +38,29 @@ func (h *Billing) ListPlans(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"plans": out}})
 }
 
+func (h *Billing) ListTokenPackagesPublic(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	pkgs, err := h.svc.ListTokenPackages(r.Context(), true)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", "could not list packages")
+		return
+	}
+	list := make([]map[string]any, 0, len(pkgs))
+	for _, p := range pkgs {
+		list = append(list, map[string]any{
+			"id":         p.ID.String(),
+			"name":       p.Name,
+			"tokens":     p.Tokens,
+			"price_rub":  p.PriceRUB,
+			"sort_order": p.SortOrder,
+		})
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"packages": list}})
+}
+
 func (h *Billing) Me(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
