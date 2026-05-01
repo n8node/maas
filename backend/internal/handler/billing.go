@@ -273,6 +273,32 @@ func (a *BillingAdmin) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (a *BillingAdmin) DeletePlan(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	err = a.svc.AdminDeletePlan(r.Context(), id)
+	if errors.Is(err, billing.ErrPlanDeleteInUse) {
+		WriteError(w, http.StatusConflict, "CONFLICT", err.Error())
+		return
+	}
+	if errors.Is(err, billing.ErrPlanNotFound) {
+		WriteError(w, http.StatusNotFound, "NOT_FOUND", "plan not found")
+		return
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", "delete failed")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type pkgBody struct {
 	Name      string `json:"name"`
 	Tokens    int64  `json:"tokens"`

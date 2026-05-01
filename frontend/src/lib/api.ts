@@ -173,3 +173,70 @@ export async function cancelSubscription(token: string, cancelAtPeriodEnd: boole
     throw new Error(data.error?.message ?? "Could not cancel subscription");
   }
 }
+
+export type PlanUpsertPayload = {
+  name: string;
+  slug: string;
+  price_monthly_rub: number;
+  price_yearly_rub: number;
+  max_instances: number;
+  monthly_tokens: number;
+  max_storage_mb: number;
+  allowed_memory_types: string[];
+  sort_order: number;
+  is_public: boolean;
+  is_archived: boolean;
+};
+
+export async function adminListPlans(token: string): Promise<PlanDTO[]> {
+  const res = await fetch(`${API_BASE}/admin/plans`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { plans: PlanDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load plans");
+  }
+  return data.data.plans;
+}
+
+export async function adminCreatePlan(token: string, body: PlanUpsertPayload): Promise<string> {
+  const res = await fetch(`${API_BASE}/admin/plans`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await parseJson(res)) as { data: { id: string } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not create plan");
+  }
+  return data.data.id;
+}
+
+export async function adminUpdatePlan(token: string, id: string, body: PlanUpsertPayload): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/plans/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not update plan");
+  }
+}
+
+export async function adminDeletePlan(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/admin/plans/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not delete plan");
+  }
+}

@@ -76,6 +76,7 @@ func New(opts Options) http.Handler {
 			r.Get("/plans", billAdm.ListPlans)
 			r.Post("/plans", billAdm.CreatePlan)
 			r.Patch("/plans/{id}", billAdm.UpdatePlan)
+			r.Delete("/plans/{id}", billAdm.DeletePlan)
 			r.Get("/packages", billAdm.ListPackages)
 			r.Post("/packages", billAdm.CreatePackage)
 			r.Patch("/packages/{id}", billAdm.UpdatePackage)

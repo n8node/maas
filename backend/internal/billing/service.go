@@ -13,7 +13,11 @@ import (
 	"github.com/n8node/maas/backend/internal/models"
 )
 
-var ErrTokensExhausted = errors.New("tokens exhausted")
+var (
+	ErrTokensExhausted = errors.New("tokens exhausted")
+	ErrPlanDeleteInUse = errors.New("plan has subscriptions; cannot delete")
+	ErrPlanNotFound    = errors.New("plan not found")
+)
 
 type Service struct {
 	pool *pgxpool.Pool
@@ -367,6 +371,33 @@ func (s *Service) AdminUpdatePlan(ctx context.Context, id uuid.UUID, in PlanUpse
 		in.AllowedMemoryTypes, in.SortOrder, in.IsPublic, in.IsArchived,
 	)
 	return err
+}
+
+func (s *Service) AdminDeletePlan(ctx context.Context, id uuid.UUID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+
+	var n int
+	if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM subscriptions WHERE plan_id = $1`, id).Scan(&n); err != nil {
+		return err
+	}
+	if n > 0 {
+		return ErrPlanDeleteInUse
+	}
+	if _, err := tx.Exec(ctx, `UPDATE payments SET plan_id = NULL WHERE plan_id = $1`, id); err != nil {
+		return err
+	}
+	tag, err := tx.Exec(ctx, `DELETE FROM plans WHERE id = $1`, id)
+	if err != nil {
+		return err
+	}
+	if tag.RowsAffected() == 0 {
+		return ErrPlanNotFound
+	}
+	return tx.Commit(ctx)
 }
 
 func (s *Service) ListTokenPackages(ctx context.Context, activeOnly bool) ([]models.TokenPackage, error) {
