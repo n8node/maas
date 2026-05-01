@@ -150,32 +150,32 @@ nano .env
 # - OPENROUTER_API_KEY (из OpenRouter dashboard)
 # - ENVIRONMENT=production
 
-# 3. Получить SSL-сертификат (Let's Encrypt)
-# Сначала запустить без SSL чтобы certbot мог верифицировать домен
+# 3. Установить certbot на хосте (один раз): sudo apt install certbot -y
+
+# 4. Запустить production по HTTP (nginx слушает :80)
 make prod
 
-# Остановить и получить сертификат
-docker compose -f docker-compose.yml -f docker-compose.prod.yml down
-sudo apt install certbot -y
-sudo certbot certonly --standalone -d mnemoniqa.com -d www.mnemoniqa.com
-sudo cp /etc/letsencrypt/live/mnemoniqa.com/fullchain.pem nginx/ssl/
-sudo cp /etc/letsencrypt/live/mnemoniqa.com/privkey.pem nginx/ssl/
+# 5. Автовыпуск Let's Encrypt (standalone на :80; скрипт остановит контейнер nginx на время запроса)
+# В .env задать DOMAIN=mnemoniqa.com и при необходимости CERTBOT_EMAIL (по умолчанию erman.ai@yandex.ru)
+chmod +x scripts/ssl-init.sh
+./scripts/ssl-init.sh
 
-# 4. Включить SSL в nginx конфиге
-# Раскомментировать SSL server block в nginx/conf.d/default.conf
-# Раскомментировать HTTP→HTTPS redirect
+# 6. Один раз включить HTTPS в nginx: раскомментировать SSL server block и редирект HTTP→HTTPS в nginx/conf.d/default.conf
+#    Затем проверка конфига и reload:
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -t
+#    docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload
 
-# 5. Запустить production
+# 7. Запустить production (если ssl-init останавливал только nginx — он уже поднят; при полном down выполнить снова)
 make prod
 
-# 6. Применить миграции
+# 8. Применить миграции
 make migrate
 
-# 7. Создать суперадмина
+# 9. Создать суперадмина
 docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend \
   ./server --seed-admin --email=admin@mnemoniqa.com --password=CHANGE_ME
 
-# 8. Проверить
+# 10. Проверить
 curl https://mnemoniqa.com/health
 # {"status":"ok","version":"0.1.0"}
 ```
@@ -290,12 +290,20 @@ A     www.mnemoniqa.com  → {server_ip}
 
 ### Auto-renewal SSL
 
+Использовать **deploy-hook**, чтобы после успешного `renew` обновлялись файлы в `nginx/ssl/` и выполнялся reload nginx:
+
 ```bash
-# Cron для автопродления (на сервере)
-sudo crontab -e
-# Добавить:
-0 3 * * * certbot renew --quiet && cp /etc/letsencrypt/live/mnemoniqa.com/fullchain.pem /opt/memory-service/nginx/ssl/ && cp /etc/letsencrypt/live/mnemoniqa.com/privkey.pem /opt/memory-service/nginx/ssl/ && cd /opt/memory-service && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
+sudo chmod +x /opt/maas/scripts/ssl-deploy-hook.sh
+sudo certbot renew --quiet --deploy-hook "/opt/maas/scripts/ssl-deploy-hook.sh"
 ```
+
+Cron (пример; путь к проекту заменить при необходимости):
+
+```bash
+0 3 * * * certbot renew --quiet --deploy-hook "/opt/maas/scripts/ssl-deploy-hook.sh" >> /var/log/certbot-renew.log 2>&1
+```
+
+Устаревший вариант с ручным `cp` и `memory-service` оставлять не рекомендуется — хук единообразен с `ssl-init.sh`.
 
 ### Nginx SSL конфигурация (production)
 
@@ -484,9 +492,9 @@ ssh deploy@{server_ip} "docker stats --no-stream"
 2. **Перед деплоем — `git pull` на сервере, НЕ копирование файлов.**
 3. **`.env` создаётся вручную на сервере, НЕ пушится в git.**
 4. **Миграции запускаются ПОСЛЕ старта контейнеров.**
-5. **SSL сертификаты хранятся на сервере в `nginx/ssl/`, НЕ в git.**
-6. **Бэкапы БД — ежедневно, хранятся 30 дней.**
-7. **Суперадмин создаётся через CLI seed-команду, НЕ через регистрацию.**
-8. **После деплоя — проверить `/health` endpoint.**
-9. **Логи Docker — json-file driver, max 10MB × 3 файла** (настроено в docker-compose.prod.yml).
-10. **Домен: DNS A-запись должна указывать на IP сервера ДО первого деплоя.**
+5. **SSL:** первичный выпуск — `scripts/ssl-init.sh` (email по умолчанию `erman.ai@yandex.ru`, см. `mnemoniqa-ssl.mdc`); продление — `certbot renew` с `scripts/ssl-deploy-hook.sh`. Сертификаты в `nginx/ssl/`, НЕ в git.
+6. **Бэкапы БД** — ежедневно, хранятся 30 дней.
+7. **Суперадмин** создаётся через CLI seed-команду, НЕ через регистрацию.
+8. **После деплоя** — проверить `/health` endpoint.
+9. **Логи Docker** — json-file driver, max 10MB × 3 файла (настроено в docker-compose.prod.yml).
+10. **Домен:** DNS A-запись должна указывать на IP сервера ДО первого запуска `ssl-init.sh` / certbot.

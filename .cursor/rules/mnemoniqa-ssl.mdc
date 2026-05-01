@@ -1,0 +1,17 @@
+---
+description: Автовыпуск SSL через scripts/ssl-init.sh, email Let's Encrypt по умолчанию
+globs: ["**/scripts/**", "**/nginx/**", "**/.env.example"]
+alwaysApply: true
+---
+
+# Mnemoniqa — автоматизация SSL
+
+## Let's Encrypt
+
+- **Регистрация и уведомления ACME:** email по умолчанию **`erman.ai@yandex.ru`**. Переопределение через переменную **`CERTBOT_EMAIL`** в `.env` на сервере.
+- **Домен по умолчанию для выпуска:** **`DOMAIN=mnemoniqa.com`** (и `www.$DOMAIN`). Переопределение через **`DOMAIN`** в `.env`.
+- **Первичный выпуск:** скрипт репозитория **`scripts/ssl-init.sh`** — `certbot certonly --standalone` (email и домен из `.env`, дефолты выше), копирование `fullchain.pem` / `privkey.pem` в **`nginx/ssl/`**, временная остановка контейнера **nginx** на время запроса, если используется Docker Compose.
+- **Продление:** `certbot renew` с **`scripts/ssl-deploy-hook.sh`** — синхронизация PEM в проект и `nginx -s reload`.
+- Сертификаты по-прежнему **не коммитятся** (см. `.gitignore`).
+
+После первого выпуска один раз нужно **включить HTTPS-блок в nginx** (раскомментировать в конфиге), если шаблон ещё не делает это условно — см. `memory-service-deploy.mdc`.

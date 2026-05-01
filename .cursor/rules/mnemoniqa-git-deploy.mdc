@@ -54,6 +54,20 @@ ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && make migrate'
 ssh deploy@YOUR_SERVER_IP 'cd /opt && git clone https://github.com/n8node/maas.git && cd maas && cp .env.example .env'
 ```
 
+### SSL: первый выпуск на сервере (авто)
+
+После `make prod` по HTTP и когда DNS уже указывает на сервер. Email Let's Encrypt по умолчанию **`erman.ai@yandex.ru`** (или `CERTBOT_EMAIL` в `.env`). Домен — переменная **`DOMAIN`** в `.env` (по умолчанию в `ssl-init.sh`: `mnemoniqa.com`).
+
+```bash
+ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && chmod +x scripts/ssl-init.sh scripts/ssl-deploy-hook.sh && ./scripts/ssl-init.sh'
+```
+
+Продление (обычно в cron на хосте):
+
+```bash
+sudo certbot renew --quiet --deploy-hook "/opt/maas/scripts/ssl-deploy-hook.sh"
+```
+
 ## Локальный push (для копирования разработчиком)
 
 ```bash
