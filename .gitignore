@@ -27,6 +27,7 @@ Thumbs.db
 # SSL
 nginx/ssl/*.pem
 nginx/ssl/*.key
+nginx/conf.d/https.conf
 
 # WordPress uploads
 wordpress/uploads/

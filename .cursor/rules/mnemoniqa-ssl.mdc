@@ -14,4 +14,4 @@ alwaysApply: true
 - **Продление:** `certbot renew` с **`scripts/ssl-deploy-hook.sh`** — синхронизация PEM в проект и `nginx -s reload`.
 - Сертификаты по-прежнему **не коммитятся** (см. `.gitignore`).
 
-После первого выпуска один раз нужно **включить HTTPS-блок в nginx** (раскомментировать в конфиге), если шаблон ещё не делает это условно — см. `memory-service-deploy.mdc`.
+После первого выпуска один раз нужно **включить HTTPS в nginx**: скопировать **`nginx/conf.d/https.conf.sample`** → **`nginx/conf.d/https.conf`**, пересобрать образ **`nginx`** и поднять контейнер (см. вывод `ssl-init.sh`). Файл **`https.conf`** в git не хранится (`.gitignore`). Опционально затем включить редирект HTTP→HTTPS по комментарию в **`nginx/conf.d/default.conf`**.

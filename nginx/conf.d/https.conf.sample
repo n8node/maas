@@ -1,0 +1,16 @@
+# Скопировать в https.conf на сервере ПОСЛЕ успешного ssl-init (есть nginx/ssl/*.pem):
+#   cp nginx/conf.d/https.conf.sample nginx/conf.d/https.conf
+# Затем пересобрать nginx: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build nginx
+#
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    http2 on;
+    server_name mnemoniqa.com www.mnemoniqa.com;
+
+    ssl_certificate /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+
+    include /etc/nginx/conf.d/locations.inc;
+}

@@ -69,5 +69,7 @@ sudo chmod 640 "$ROOT/nginx/ssl/privkey.pem"
 start_nginx_if_stopped
 
 echo ">>> Certificate installed under nginx/ssl/"
-echo ">>> Next: uncomment HTTPS / redirect in nginx/conf.d/default.conf, then:"
-echo "       ${COMPOSE[*]} exec nginx nginx -t && ${COMPOSE[*]} exec nginx nginx -s reload"
+echo ">>> Next: enable HTTPS in nginx — copy the sample and rebuild nginx:"
+echo "       cp nginx/conf.d/https.conf.sample nginx/conf.d/https.conf"
+echo "       ${COMPOSE[*]} build nginx && ${COMPOSE[*]} up -d nginx"
+echo ">>> Optional: enable HTTP→HTTPS redirect (see comment in nginx/conf.d/default.conf)."
