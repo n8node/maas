@@ -23,9 +23,11 @@ function initialsFromEmail(email: string): string {
 type Props = {
   userEmail: string;
   planLabel: string;
+  /** Show link to /superadmin (superadmin users only). */
+  isSuperadmin?: boolean;
 };
 
-export function DashboardSidebar({ userEmail, planLabel }: Props) {
+export function DashboardSidebar({ userEmail, planLabel, isSuperadmin }: Props) {
   const pathname = usePathname();
   const homeActive = pathname === "/";
   const billingActive = pathname === "/billing";
@@ -72,6 +74,17 @@ export function DashboardSidebar({ userEmail, planLabel }: Props) {
         >
           Billing
         </Link>
+        {isSuperadmin ? (
+          <Link
+            href="/superadmin"
+            className={clsx(
+              "flex items-center gap-2 rounded-md px-3 py-[7px] text-muted no-underline hover:bg-bg2 hover:text-ink",
+              pathname === "/superadmin" && "bg-bg2 font-medium text-ink",
+            )}
+          >
+            Superadmin
+          </Link>
+        ) : null}
         <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
           Settings
         </span>

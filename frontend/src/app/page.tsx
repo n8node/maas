@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { OverviewDashboard } from "@/components/dashboard/OverviewDashboard";
 import { meRequest, type MeUser } from "@/lib/api";
 import { clearToken, getToken } from "@/lib/token";
 
@@ -41,56 +42,28 @@ export default function DashboardHome() {
     );
   }
 
+  if (user) {
+    return <OverviewDashboard user={user} onLogout={logout} />;
+  }
+
   return (
     <main className="flex min-h-screen flex-col items-center justify-center gap-6 bg-bg3 px-6 py-12">
       <p className="text-sm text-muted">Mnemoniqa</p>
       <h1 className="text-center text-xl font-medium tracking-tight text-ink">
-        Dashboard — Coming soon
+        Dashboard
       </h1>
       <p className="max-w-md text-center text-sm text-subtle">
-        Memory infrastructure for AI agents.
+        Memory infrastructure for AI agents. Sign in to open your workspace overview.
       </p>
 
-      {user ? (
-        <div className="mt-2 flex max-w-md flex-col items-center gap-3 rounded-lg border border-border bg-bg px-6 py-4 text-center">
-          <p className="text-sm text-ink">
-            Signed in as <span className="font-medium">{user.email}</span>
-          </p>
-          <p className="text-xs text-muted">
-            Role: <code className="rounded bg-bg2 px-1">{user.role}</code>
-          </p>
-          <div className="flex flex-wrap items-center justify-center gap-2">
-            <Link
-              href="/billing"
-              className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2"
-            >
-              Billing
-            </Link>
-            <button
-              type="button"
-              onClick={logout}
-              className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2"
-            >
-              Sign out
-            </button>
-          </div>
-        </div>
-      ) : (
-        <div className="flex gap-4">
-          <Link
-            href="/login"
-            className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-bg hover:opacity-90"
-          >
-            Sign in
-          </Link>
-          <Link
-            href="/register"
-            className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2"
-          >
-            Register
-          </Link>
-        </div>
-      )}
+      <div className="flex gap-4">
+        <Link href="/login" className="rounded-md bg-ink px-4 py-2 text-sm font-medium text-bg hover:opacity-90">
+          Sign in
+        </Link>
+        <Link href="/register" className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2">
+          Register
+        </Link>
+      </div>
     </main>
   );
 }
