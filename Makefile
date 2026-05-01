@@ -2,7 +2,7 @@ COMPOSE ?= docker compose
 COMPOSE_PROD := $(COMPOSE) -f docker-compose.yml -f docker-compose.prod.yml
 COMPOSE_DEV := $(COMPOSE) -f docker-compose.yml -f docker-compose.dev.yml
 
-.PHONY: dev prod down migrate migrate-down test lint logs logs-prod psql wp-cli deploy backup-db backup-wp status ssl-init setup
+.PHONY: dev prod down migrate migrate-down test lint logs logs-prod psql wp-cli deploy backup-db backup-wp status ssl-init setup seed-superadmin
 
 ## Development stack (frontend hot-reload)
 dev:
@@ -57,3 +57,9 @@ ssl-init:
 setup:
 	chmod +x scripts/setup.sh scripts/deploy.sh scripts/backup.sh scripts/ssl-init.sh scripts/ssl-deploy-hook.sh
 	./scripts/setup.sh
+
+## Superadmin seed (CLI only). Usage: make seed-superadmin EMAIL=a@b.co PASSWORD='secure-long-pass'
+seed-superadmin:
+	@test -n "$(EMAIL)" || (echo "Set EMAIL= and PASSWORD= (min 12 chars)"; exit 1)
+	@test -n "$(PASSWORD)" || (echo "Set PASSWORD="; exit 1)
+	$(COMPOSE_PROD) run --rm --entrypoint /app/seed backend -email="$(EMAIL)" -password="$(PASSWORD)"

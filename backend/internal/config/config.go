@@ -18,7 +18,7 @@ type Config struct {
 	PostgresSSLMode  string `env:"POSTGRES_SSLMODE" envDefault:"disable"`
 
 	ServerPort string `env:"SERVER_PORT" envDefault:"8080"`
-	Version    string `env:"VERSION" envDefault:"0.1.0"`
+	Version    string `env:"VERSION" envDefault:"0.2.0"`
 
 	JWTSecret  string `env:"JWT_SECRET" envDefault:""`
 	APIKeySalt string `env:"API_KEY_SALT" envDefault:""`

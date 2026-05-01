@@ -3,10 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -24,6 +26,10 @@ func main() {
 	cfg, err := config.Load()
 	if err != nil {
 		slog.Error("config", slog.Any("err", err))
+		os.Exit(1)
+	}
+	if err := validateSecrets(cfg); err != nil {
+		slog.Error("secrets", slog.Any("err", err))
 		os.Exit(1)
 	}
 
@@ -50,6 +56,8 @@ func main() {
 		Logger:        logger,
 		HealthHandler: handler.NewHealth(cfg.Version),
 		CORSOrigins:   []string{"*"},
+		Config:        cfg,
+		Pool:          pool,
 	})
 
 	addr := ":" + cfg.ServerPort
@@ -79,6 +87,16 @@ func main() {
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown", slog.Any("err", err))
 	}
+}
+
+func validateSecrets(c *config.Config) error {
+	if len(strings.TrimSpace(c.JWTSecret)) < 16 {
+		return fmt.Errorf("JWT_SECRET must be at least 16 characters")
+	}
+	if strings.TrimSpace(c.APIKeySalt) == "" {
+		return fmt.Errorf("API_KEY_SALT must be non-empty")
+	}
+	return nil
 }
 
 func runMigrations(databaseURL string, logger *slog.Logger) error {
