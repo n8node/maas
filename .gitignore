@@ -33,4 +33,5 @@ wordpress/uploads/
 
 # Logs & backups
 *.log
-backups/
+backups/*
+!backups/.gitkeep
