@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MemoryService — All Instance Types</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f8f8f7;--bg3:#f3f2ef;
+  --text:#1a1a1a;--text2:#5f5e5a;--text3:#888780;
+  --border:#e8e7e3;--border2:#d3d1c7;
+  --radius:8px;--radius-lg:12px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'SF Mono','Fira Mono',monospace;
+}
+body{font-family:var(--font);font-size:13px;background:var(--bg3);color:var(--text)}
+.switcher{display:flex;gap:6px;flex-wrap:wrap;padding:12px 16px;background:var(--bg);border-bottom:1px solid var(--border);align-items:center;position:sticky;top:0;z-index:20}
+.sw-btn{padding:5px 14px;border-radius:20px;border:1px solid var(--border2);background:transparent;cursor:pointer;font-size:12px;color:var(--text2);font-family:var(--font);display:flex;align-items:center;gap:5px;transition:all .12s}
+.sw-btn:hover{background:var(--bg2)}
+.sw-btn.active{border-width:2px;font-weight:500}
+.sw-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.shell{min-height:560px}
+.topbar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 20px;height:46px;display:flex;align-items:center;justify-content:space-between}
+.breadcrumb{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:5px}
+.bc-cur{color:var(--text);font-weight:500}
+.btn-xs{padding:4px 10px;border:1px solid var(--border2);border-radius:5px;background:transparent;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+.btn-xs:hover{background:var(--bg2)}
+.btn-xs.dark{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.status-pill{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);background:var(--bg2);padding:3px 9px;border-radius:20px;border:1px solid var(--border)}
+.stat-strip{display:flex;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 20px}
+.stat-cell{flex:1;padding:0 14px;border-right:1px solid var(--border)}
+.stat-cell:first-child{padding-left:0}.stat-cell:last-child{border-right:none}
+.sv{font-size:18px;font-weight:500;letter-spacing:-0.02em}
+.sk{font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.ss{font-size:11px;color:var(--text3);margin-top:2px}
+.tab-bar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 20px;display:flex;overflow-x:auto}
+.tab{font-size:12px;color:var(--text2);padding:0 12px;height:38px;display:flex;align-items:center;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;gap:5px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:#1a1a1a;font-weight:500}
+.tb{font-size:9px;background:var(--bg2);color:var(--text3);padding:1px 5px;border-radius:7px}
+.tab.active .tb{background:#1a1a1a;color:#fff}
+.content{padding:16px 20px}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px}
+.card-title{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.three-col{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.tbl{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px}
+.tbl-head{padding:7px 14px;border-bottom:1px solid var(--border);background:var(--bg2);display:grid}
+.th{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+.tbl-row{padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:grid}
+.tbl-row:last-child{border-bottom:none}
+.tbl-row:hover{background:var(--bg2)}
+.td{font-size:12px;display:flex;align-items:center;gap:5px}
+.badge{font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px}
+.b-active{background:#eaf3de;color:#3b6d11}
+.b-stale{background:#faeeda;color:#854f0b}
+.b-disputed{background:#fcebeb;color:#a32d2d}
+.hrow{display:flex;align-items:center;gap:6px;margin-bottom:4px}
+.hl{font-size:11px;color:var(--text3);width:72px;flex-shrink:0}
+.ht{flex:1;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
+.hf{height:100%;border-radius:2px}
+.hf-g{background:#639922}.hf-w{background:#ba7517}.hf-p{background:#534ab7}.hf-b{background:#185fa5}
+.hv{font-size:11px;font-weight:500;min-width:32px;text-align:right}
+.hv-g{color:#3b6d11}.hv-w{color:#ba7517}
+.cb-bar{display:flex;align-items:center;gap:5px}
+.cb-track{width:40px;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
+.cb-fill{height:100%;border-radius:2px}
+.metric{text-align:center;padding:8px;background:var(--bg2);border-radius:6px}
+.mv{font-size:14px;font-weight:500}.mk{font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-top:2px}
+.kv-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+.kv-row:last-child{border-bottom:none}
+.kv-key{font-family:var(--mono);font-size:12px;color:#534ab7;min-width:120px}
+.kv-val{flex:1;font-size:12px;color:var(--text2)}
+.kv-ttl{font-size:10px;color:var(--text3)}
+.decay-bar{height:4px;background:var(--bg2);border-radius:2px;overflow:hidden;margin-top:4px}
+.decay-fill{height:100%;border-radius:2px;background:#3b6d11}
+.log-row{display:flex;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border)}
+.log-row:last-child{border-bottom:none}
+.log-icon{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.log-act{font-size:12px}.log-rat{font-size:11px;color:var(--text3);font-style:italic;margin-top:2px}
+.log-meta{font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--mono)}
+.ap{font-size:10px;font-weight:500;padding:1px 6px;border-radius:3px;margin-right:4px}
+.ap-create{background:#eaf3de;color:#3b6d11}
+.ap-attach{background:#e6f1fb;color:#185fa5}
+.ap-refine{background:#eeedfe;color:#534ab7}
+.ap-reject{background:#f1efe8;color:#5f5e5a}
+.prop-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:8px}
+.pt{font-size:10px;font-weight:500;padding:2px 8px;border-radius:4px}
+.pt-merge{background:#fbeaf0;color:#993556}
+.pt-split{background:#e6f1fb;color:#185fa5}
+.pt-noise{background:#f1efe8;color:#5f5e5a}
+.btn-approve{background:#1a1a1a;color:#fff;border:none;border-radius:5px;padding:4px 12px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.btn-reject{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:4px 12px;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+.rq-row{display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid var(--border)}
+.rq-row:last-child{border-bottom:none}
+.rq-prio{width:16px;height:16px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:500;flex-shrink:0}
+.layer-row{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:8px 12px;margin-bottom:6px}
+.lv-prio{width:18px;height:18px;border-radius:50%;background:var(--bg2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:9px;color:var(--text2);flex-shrink:0}
+.lv-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.tgl{width:28px;height:16px;border-radius:8px;position:relative;cursor:pointer;flex-shrink:0}
+.tgl.on{background:#1a1a1a}.tgl.off{background:var(--border2)}
+.tgl::after{content:'';position:absolute;width:10px;height:10px;background:#fff;border-radius:50%;top:3px;transition:left .15s}
+.tgl.on::after{left:15px}.tgl.off::after{left:3px}
+.reaction-row{display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)}
+.reaction-row:last-child{border-bottom:none}
+.pattern-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:8px}
+.pc-name{font-size:13px;font-weight:500;margin-bottom:2px}
+.pc-ev{font-size:11px;color:var(--text3);margin-bottom:6px}
+.pc-desc{font-size:12px;color:var(--text2);line-height:1.4;margin-bottom:8px}
+.graph-vis{background:var(--bg2);border-radius:var(--radius);height:160px;position:relative;overflow:hidden;margin-bottom:10px}
+.gnode{position:absolute;display:flex;flex-direction:column;align-items:center;gap:2px;transform:translate(-50%,-50%)}
+.gnode-circle{width:26px;height:26px;border-radius:50%;border:2px solid;display:flex;align-items:center;justify-content:center}
+.gnode-label{font-size:9px;color:var(--text2);text-align:center;max-width:52px;line-height:1.2}
+.cit-inline{display:inline;border-radius:3px;padding:0 3px;font-size:10px;font-weight:500}
+.qr-box{background:var(--bg2);border-radius:var(--radius);padding:10px 12px;font-size:12px;line-height:1.6;margin-bottom:8px}
+.cit-row{display:flex;gap:7px;align-items:flex-start;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:5px}
+.cb{font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;flex-shrink:0}
+textarea.pg{width:100%;border:1px solid var(--border2);border-radius:var(--radius);padding:8px;font-size:12px;resize:none;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.5}
+textarea.pg:focus{outline:none;border-color:#888}
+.mi{height:28px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 8px;font-size:12px;background:var(--bg);color:var(--text);font-family:var(--font)}
+.ms{height:28px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 8px;font-size:12px;background:var(--bg);color:var(--text);font-family:var(--font);cursor:pointer}
+.btn-dark{background:#1a1a1a;color:#fff;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+</style>
+</head>
+<body>
+<!-- Type switcher -->
+<div class="switcher" id="switcher"></div>
+<div class="shell" id="shell"></div>
+
+<script>
+const types={
+  rag:{name:'FAQ Knowledge Base',label:'RAG',color:'#185fa5',bg:'#e6f1fb',statusDot:'#639922',
+    stats:[{v:'847',k:'Chunks',s:'12 topics clustered'},{v:'23',k:'Documents',s:'last: 2h ago'},{v:'312',k:'Queries today',s:'↑8% vs yesterday'},{v:'0.91',k:'Avg score',s:'top-5 results'},{v:'88%',k:'Coverage',s:'high_conf: 71%'}],
+    tabs:['Playground','Documents','Topics','Settings'],extraBtns:[]},
+  wiki:{name:'Product Knowledge Base',label:'Wiki',color:'#534ab7',bg:'#eeedfe',statusDot:'#639922',
+    stats:[{v:'234',k:'Concepts',s:'3 stale · 1 disputed'},{v:'18',k:'Sources',s:'147 segments'},{v:'89',k:'Queries today',s:'↑12%'},{v:'0.84',k:'Purity',s:'coverage 82%'},{v:'14%',k:'Stale ratio',s:'gardener pending'}],
+    tabs:['Playground','Concepts','Action log','Gardener','Settings'],extraBtns:[]},
+  episodic:{name:'Coach Bot History',label:'Episodic',color:'#3b6d11',bg:'#eaf3de',statusDot:'#639922',
+    stats:[{v:'5.2K',k:'Episodes',s:'bi-temporal on'},{v:'0.73',k:'Avg decay',s:'rate: 0.05/day'},{v:'89',k:'Queries today',s:'312 users scoped'},{v:'Jul 2024',k:'Oldest entry',s:'14 months history'},{v:'76%',k:'Coverage',s:'anchored 68%'}],
+    tabs:['Playground','Episodes','Timeline','Decay','Settings'],extraBtns:['Run decay']},
+  working:{name:'Session Context',label:'Working',color:'#854f0b',bg:'#faeeda',statusDot:'#639922',
+    stats:[{v:'127',k:'Sessions',s:'43 active now'},{v:'1,840',k:'Keys total',s:'all sessions'},{v:'15m',k:'Default TTL',s:'max: 4h'},{v:'94%',k:'Hit rate',s:'last 24h'},{v:'2.1 MB',k:'Memory used',s:'of 100 MB limit'}],
+    tabs:['Sessions','Keys','Settings'],extraBtns:['Flush expired']},
+  graph:{name:'Entity Graph',label:'Graph',color:'#993c1d',bg:'#faece7',statusDot:'#ba7517',
+    stats:[{v:'1.1K',k:'Entities',s:'8 types'},{v:'3.4K',k:'Relations',s:'6 relation types'},{v:'4',k:'Repair queue',s:'2 high priority'},{v:'100%',k:'Grounding',s:'all have source_id'},{v:'0.81',k:'Avg confidence',s:'12 disputed'}],
+    tabs:['Playground','Entities','Relations','Repair queue','Settings'],extraBtns:['Run invalidation']},
+  reflective:{name:'User Patterns',label:'Reflective',color:'#993556',bg:'#fbeaf0',statusDot:'#639922',
+    stats:[{v:'47',k:'Patterns',s:'≥3 episodes each'},{v:'12',k:'Tensions',s:'3 unresolved'},{v:'284',k:'Reactions',s:'312 users tracked'},{v:'0.79',k:'Avg confidence',s:'68% inferred'},{v:'8',k:'Repair queue',s:'low confidence'}],
+    tabs:['Reactions','Patterns','Tensions','Action log','Settings'],extraBtns:[]},
+  agent:{name:'Coach Bot',label:'Agent (unified)',color:'#1a1a1a',bg:'#f1efe8',statusDot:'#639922',
+    stats:[{v:'4',k:'Layers',s:'1 paused'},{v:'2.3K',k:'Queries/mo',s:'weighted strategy'},{v:'0.89',k:'Confidence',s:'avg synthesis'},{v:'4.2K',k:'Tokens/query',s:'avg context'},{v:'1.85s',k:'Avg latency',s:'parallel retrieval'}],
+    tabs:['Playground','Layers','Health','Settings'],extraBtns:['Core memory']},
+};
+
+let curType='rag',curTab=0;
+
+// Build switcher
+const sw=document.getElementById('switcher');
+Object.entries(types).forEach(([id,cfg])=>{
+  const btn=document.createElement('button');
+  btn.className='sw-btn';btn.dataset.id=id;
+  btn.innerHTML=`<div class="sw-dot" style="background:${cfg.color}"></div>${cfg.label}`;
+  btn.onclick=()=>setType(id);
+  sw.appendChild(btn);
+});
+
+function setType(id){
+  curType=id;curTab=0;
+  document.querySelectorAll('.sw-btn').forEach(b=>{
+    const active=b.dataset.id===id;
+    b.classList.toggle('active',active);
+    if(active){b.style.borderColor=types[id].color;b.style.color=types[id].color;b.style.background=types[id].bg;}
+    else{b.style.borderColor='';b.style.color='';b.style.background='';}
+  });
+  render();
+}
+
+function render(){
+  const cfg=types[curType];
+  document.getElementById('shell').innerHTML=`
+  <div class="topbar">
+    <div class="breadcrumb"><span>${cfg.label==='Agent (unified)'?'Agents':'Instances'}</span><span>›</span><span class="bc-cur">${cfg.name}</span></div>
+    <div style="display:flex;align-items:center;gap:7px">
+      <div class="status-pill"><div style="width:6px;height:6px;border-radius:50%;background:${cfg.statusDot}"></div>Active</div>
+      ${cfg.extraBtns.map(b=>`<button class="btn-xs">${b}</button>`).join('')}
+      <button class="btn-xs">Settings</button>
+      <button class="btn-xs dark">${cfg.label==='Agent (unified)'?'Unified query':'Ingest'}</button>
+    </div>
+  </div>
+  <div class="stat-strip">${cfg.stats.map((s,i)=>`<div class="stat-cell"${i===cfg.stats.length-1?' style="border-right:none"':''}><div class="sv">${s.v}</div><div class="sk">${s.k}</div><div class="ss">${s.s}</div></div>`).join('')}</div>
+  <div class="tab-bar">${cfg.tabs.map((t,i)=>`<div class="tab${i===curTab?' active':''}" onclick="setTab(${i})">${t}</div>`).join('')}</div>
+  <div class="content" id="tab-content">${getTabContent(curType,curTab)}</div>`;
+}
+
+function setTab(i){
+  curTab=i;
+  document.querySelectorAll('.tab').forEach((t,idx)=>t.classList.toggle('active',idx===i));
+  document.getElementById('tab-content').innerHTML=getTabContent(curType,i);
+}
+
+function getTabContent(type,tab){
+  const fns={
+    rag:[ragPlay,ragDocs,ragTopics,genericSettings],
+    wiki:[wikiPlay,wikiConcepts,wikiLog,wikiGardener,genericSettings],
+    episodic:[epPlay,epEpisodes,epTimeline,epDecay,genericSettings],
+    working:[wkSessions,wkKeys,genericSettings],
+    graph:[graphPlay,graphEntities,graphRelations,graphRepair,genericSettings],
+    reflective:[refReactions,refPatterns,refTensions,refLog,genericSettings],
+    agent:[agentPlay,agentLayers,agentHealth,genericSettings],
+  };
+  return (fns[type]&&fns[type][tab])?fns[type][tab]():'<div style="padding:32px;text-align:center;color:var(--text3)">Content goes here</div>';
+}
+
+// ── RAG ──────────────────────────────────────────
+function ragPlay(){return `<div class="two-col">
+<div><div class="card"><div class="card-title">Ingest document</div>
+<textarea class="pg" rows="5" placeholder="Paste text, markdown or drop a file…"></textarea>
+<div style="display:flex;gap:6px;margin-top:7px"><input class="mi" style="flex:1" placeholder="user_id"/><button class="btn-dark">Ingest async</button></div>
+</div>
+<div class="card"><div class="card-title">Chunk preview</div>
+<div style="background:var(--bg2);border-radius:5px;padding:8px;font-size:11px;color:var(--text2);line-height:1.5">
+<span style="background:#b5d4f4;color:#0c447c;padding:1px 3px;border-radius:2px">Chunk 1 — 512 tok</span> The engineering team will focus on three key initiatives…
+<span style="background:#c0dd97;color:#27500a;padding:1px 3px;border-radius:2px;margin-left:2px">Chunk 2 — 498 tok</span> API rate limiting overhaul will reduce error rates by 40%…
+</div></div></div>
+<div><div class="card"><div class="card-title">Query</div>
+<input class="mi" style="width:100%;margin-bottom:8px" placeholder="What is the main topic?"/>
+<div style="display:flex;gap:6px;margin-bottom:8px"><select class="ms"><option>top_k = 5</option><option>top_k = 10</option></select><button class="btn-dark">Search</button></div>
+<div class="qr-box">Top 3 chunks match with avg score 0.91. Documents cover API rate limiting <span class="cit-inline" style="background:#e6f1fb;color:#185fa5">[RAG:chunk_12]</span> and Q3 engineering priorities <span class="cit-inline" style="background:#e6f1fb;color:#185fa5">[RAG:chunk_34]</span>.</div>
+<div class="cit-row"><span class="cb" style="background:#e6f1fb;color:#185fa5">RAG</span><span style="font-size:11px;color:var(--text2);flex:1">API rate limiting — overhaul to reduce errors by 40%</span><span style="font-size:10px;color:var(--text3)">0.95</span></div>
+<div class="cit-row"><span class="cb" style="background:#e6f1fb;color:#185fa5">RAG</span><span style="font-size:11px;color:var(--text2);flex:1">Q3 priorities: rate limiting, webhooks, MCP integration</span><span style="font-size:10px;color:var(--text3)">0.88</span></div>
+</div></div></div>`;}
+
+function ragDocs(){
+  const docs=[['roadmap-q3.pdf','8.4 KB','12','Active','2h ago'],['faq-v2.md','3.1 KB','7','Active','1d ago'],['onboarding.docx','14.2 KB','22','Active','3d ago']];
+  return `<div class="tbl"><div class="tbl-head" style="grid-template-columns:1fr 70px 70px 70px 70px"><div class="th">Name</div><div class="th">Size</div><div class="th">Chunks</div><div class="th">Status</div><div class="th">Indexed</div></div>
+  ${docs.map(d=>`<div class="tbl-row" style="grid-template-columns:1fr 70px 70px 70px 70px"><div class="td" style="font-weight:500">📄 ${d[0]}</div><div class="td" style="color:var(--text3)">${d[1]}</div><div class="td">${d[2]}</div><div class="td"><span class="badge b-active">${d[3]}</span></div><div class="td" style="color:var(--text3)">${d[4]}</div></div>`).join('')}</div>`;}
+
+function ragTopics(){return `<div class="card"><div class="card-title">Hierarchical clusters</div>
+${[['Engineering Roadmap',['API Rate Limiting','Q3 Priorities','MCP Integration'],34,'0.89'],['Product Features',['Webhooks System','SDK Overview','Auth Flow'],28,'0.85'],['Support & FAQ',['Billing Questions','Account Setup'],21,'0.91']].map(([n,subs,chunks,score])=>`
+<div style="background:var(--bg2);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><div style="font-size:13px;font-weight:500">${n}</div><div style="font-size:11px;color:var(--text3)">${chunks} chunks · score ${score}</div></div>
+<div style="display:flex;gap:5px;flex-wrap:wrap">${subs.map(s=>`<span style="font-size:11px;background:var(--bg);border:1px solid var(--border);padding:2px 8px;border-radius:4px;color:var(--text2)">${s}</span>`).join('')}</div>
+</div>`).join('')}</div>`;}
+
+// ── WIKI ──────────────────────────────────────────
+function wikiPlay(){return `<div class="two-col">
+<div><div class="card"><div class="card-title">Ingest → concept extraction (SGR)</div>
+<textarea class="pg" rows="6" placeholder="Text or markdown — cheap model extracts concept hypotheses…"></textarea>
+<div class="card-title" style="margin-top:8px;margin-bottom:6px">Extraction preview</div>
+${[{t:'API Rate Limiting',type:'project',conf:'0.88',act:'create',actBg:'#eaf3de',actCol:'#3b6d11'},{t:'Q3 Engineering',type:'fact',conf:'0.95',act:'create',actBg:'#eaf3de',actCol:'#3b6d11'},{t:'team',type:'entity',conf:'0.31',act:'reject',actBg:'#f1efe8',actCol:'#5f5e5a'}].map(c=>`
+<div style="display:flex;align-items:center;gap:7px;padding:5px 0;border-bottom:1px solid var(--border)">
+<span style="font-size:9px;background:${c.actBg};color:${c.actCol};padding:1px 6px;border-radius:3px;font-weight:500">${c.act}</span>
+<span style="font-size:12px;font-weight:500;flex:1">${c.t}</span>
+<span style="font-size:10px;background:#eeedfe;color:#534ab7;padding:1px 5px;border-radius:3px">${c.type}</span>
+<span style="font-size:11px;color:var(--text3)">${c.conf}</span></div>`).join('')}
+<button class="btn-dark" style="width:100%;margin-top:8px">Ingest async</button>
+</div></div>
+<div><div class="card"><div class="card-title">Query with citations</div>
+<input class="mi" style="width:100%;margin-bottom:8px" placeholder="What are the Q3 priorities?"/>
+<div class="qr-box">Q3 priorities focus on three initiatives <span class="cit-inline" style="background:#eeedfe;color:#534ab7">[Wiki:concept_q3]</span>. Rate limiting <span class="cit-inline" style="background:#eeedfe;color:#534ab7">[Wiki:concept_rl]</span> and webhooks <span class="cit-inline" style="background:#eeedfe;color:#534ab7">[Wiki:concept_wh]</span> are highest priority.</div>
+<div class="cit-row"><span class="cb" style="background:#eeedfe;color:#534ab7">Wiki</span><span style="font-size:11px;color:var(--text2);flex:1">Q3 Engineering Priorities — fact, 5 evidence spans</span><span style="font-size:10px;color:var(--text3)">0.95</span></div>
+<div class="cit-row"><span class="cb" style="background:#eeedfe;color:#534ab7">Wiki</span><span style="font-size:11px;color:var(--text2);flex:1">API Rate Limiting — project, confidence 0.88</span><span style="font-size:10px;color:var(--text3)">0.88</span></div>
+</div></div></div>`;}
+
+function wikiConcepts(){
+  const rows=[['Q3 Engineering Priorities','fact',0.95,5,'active'],['API Rate Limiting','project',0.88,3,'active'],['Webhooks System','project',0.82,2,'active'],['MCP Server Integration','project',0.79,2,'active'],['Rate limit overhaul deadline','event',0.55,1,'stale'],['Engineering Team','entity',0.41,2,'disputed']];
+  const tc={fact:'#185fa5',project:'#534ab7',event:'#3b6d11',entity:'#854f0b'};
+  const tb={fact:'#e6f1fb',project:'#eeedfe',event:'#eaf3de',entity:'#faeeda'};
+  return `<div style="display:flex;gap:7px;margin-bottom:10px"><input class="mi" style="flex:1" placeholder="Search concepts…"/><button class="btn-xs">All</button><button class="btn-xs">Active</button><button class="btn-xs">Stale</button></div>
+  <div class="tbl"><div class="tbl-head" style="grid-template-columns:1fr 80px 70px 100px 60px"><div class="th">Concept</div><div class="th">Type</div><div class="th">State</div><div class="th">Confidence</div><div class="th">Evidence</div></div>
+  ${rows.map(([name,type,conf,ev,state])=>`<div class="tbl-row" style="grid-template-columns:1fr 80px 70px 100px 60px">
+  <div class="td" style="font-weight:500;gap:6px"><div style="width:6px;height:6px;border-radius:50%;background:${tc[type]||'#888'};flex-shrink:0"></div>${name}</div>
+  <div class="td"><span style="font-size:10px;background:${tb[type]||'#eee'};color:${tc[type]||'#666'};padding:2px 6px;border-radius:3px;font-weight:500">${type}</span></div>
+  <div class="td"><span class="badge ${state==='active'?'b-active':state==='stale'?'b-stale':'b-disputed'}">${state}</span></div>
+  <div class="td"><div class="cb-bar"><div class="cb-track"><div class="cb-fill" style="width:${Math.round(conf*100)}%;background:#534ab7"></div></div><span style="font-size:11px">${conf.toFixed(2)}</span></div></div>
+  <div class="td" style="color:var(--text2)">${ev}</div></div>`).join('')}</div>`;}
+
+function wikiLog(){
+  const acts=[['create','Q3 Engineering Priorities','worker:extract','New concept — no similar in memory','#eaf3de','#3b6d11'],['attach','Q3 Engineering Priorities','worker:route','Evidence overlap, confidence ↑0.12','#e6f1fb','#185fa5'],['create','API Rate Limiting','worker:extract','Distinct project concept, 3 spans','#eaf3de','#3b6d11'],['refine','API Rate Limiting','worker:route','Updated description — new evidence adds scope','#eeedfe','#534ab7'],['reject',null,'worker:route','Candidate "team" too generic → residuals','#f1efe8','#5f5e5a']];
+  return `<div class="tbl">${acts.map(([act,c,actor,rat,bg,col])=>`<div class="log-row">
+  <div class="log-icon" style="background:${bg}"><div style="width:8px;height:8px;border-radius:50%;background:${col}"></div></div>
+  <div style="flex:1"><div class="log-act"><span class="ap ap-${act}">${act}</span>${c?`<strong>${c}</strong>`:'candidate → residuals'}</div><div class="log-rat">${rat}</div><div class="log-meta">${actor} · just now</div></div>
+  </div>`).join('')}</div>`;}
+
+function wikiGardener(){return `<div style="background:#faeeda;border:1px solid #fac775;border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<div><div style="font-size:13px;font-weight:500;color:#412402">3 proposals pending</div><div style="font-size:11px;color:#633806">Phase 0 triage complete — not applied until approved</div></div>
+<button style="background:#ba7517;color:#fff;border:none;border-radius:var(--radius);padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer">Run triage</button>
+</div>
+${[{type:'merge',cls:'pt-merge',c:'API Rate Limiting + Rate limit overhaul deadline',r:'Semantic overlap 0.91 — recommend merge'},
+{type:'split',cls:'pt-split',c:'Q3 Engineering Priorities',r:'3 distinct project refs — split improves purity 0.62→0.91'},
+{type:'noise',cls:'pt-noise',c:'Engineering Team',r:'Too generic, no distinguishing attributes — archive'}].map(p=>`
+<div class="prop-card"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span class="pt ${p.cls}">${p.type}</span><span style="font-size:11px;color:var(--text3)">Phase 0</span></div>
+<div style="font-size:13px;font-weight:500;margin-bottom:4px">${p.c}</div>
+<div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:9px">${p.r}</div>
+<div style="display:flex;gap:6px"><button class="btn-approve">Approve</button><button class="btn-reject">Reject</button></div></div>`).join('')}`;}
+
+// ── EPISODIC ──────────────────────────────────────
+function epPlay(){return `<div class="two-col">
+<div><div class="card"><div class="card-title">Record episode</div>
+<textarea class="pg" rows="4" placeholder="User mentioned they struggle with sleep this week…"></textarea>
+<div style="display:flex;gap:6px;margin-top:7px;flex-wrap:wrap">
+<input class="mi" style="flex:1" placeholder="user_id"/><input class="mi" style="flex:1" placeholder="session_id"/>
+<button class="btn-dark">Record</button></div></div>
+<div class="card"><div class="card-title">Bi-temporal controls</div>
+<div style="font-size:11px;color:var(--text2);margin-bottom:5px">Valid time — when did this happen?</div>
+<input type="date" class="mi" style="width:100%;margin-bottom:7px"/>
+<div style="font-size:11px;color:var(--text3);display:flex;align-items:center;gap:5px"><div style="width:8px;height:8px;border-radius:50%;background:#eaf3de;border:1px solid #3b6d11"></div>System time auto-set to now</div>
+</div></div>
+<div><div class="card"><div class="card-title">Semantic search with decay</div>
+<input class="mi" style="width:100%;margin-bottom:7px" placeholder="What did user mention about sleep?"/>
+<div class="qr-box" style="font-size:12px">Found 3 episodes. Most recent: poor sleep <span class="cit-inline" style="background:#eaf3de;color:#3b6d11">[Ep:ep_312]</span>. Earlier: sleep linked to work stress <span class="cit-inline" style="background:#eaf3de;color:#3b6d11">[Ep:ep_187]</span>.</div>
+${[['ep_312','2d ago','0.91','User mentioned sleeping 5h, linked to deadlines'],['ep_187','3w ago','0.74','Sleep issues + work stress pattern'],['ep_044','2mo ago','0.31','First mention of sleep concerns']].map(([id,age,w,tx])=>`
+<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);padding:6px 10px;margin-bottom:5px">
+<div style="display:flex;justify-content:space-between;margin-bottom:3px"><span style="font-size:10px;background:#eaf3de;color:#3b6d11;padding:1px 5px;border-radius:3px;font-weight:500">${id}</span><span style="font-size:10px;color:var(--text3)">${age} · weight ${w}</span></div>
+<div style="font-size:11px;color:var(--text2)">${tx}</div>
+<div class="decay-bar" style="margin-top:4px"><div class="decay-fill" style="width:${Math.round(parseFloat(w)*100)}%;background:${parseFloat(w)>0.6?'#639922':parseFloat(w)>0.3?'#ba7517':'#e24b4a'}"></div></div>
+</div>`).join('')}
+</div></div></div>`;}
+
+function epEpisodes(){
+  const eps=[['ep_312','User mentioned poor sleep','user_alice','session_44','2d ago',0.91],['ep_311','Discussed Q3 goals','user_alice','session_43','3d ago',0.87],['ep_187','Sleep linked to work stress','user_alice','session_31','3w ago',0.74],['ep_102','First coaching session','user_bob','session_12','1mo ago',0.61]];
+  return `<div style="display:flex;gap:7px;margin-bottom:10px"><input class="mi" style="flex:1" placeholder="Search episodes…"/><input class="mi" style="max-width:140px" placeholder="user_id"/></div>
+  <div class="tbl"><div class="tbl-head" style="grid-template-columns:80px 1fr 90px 70px 80px"><div class="th">ID</div><div class="th">Content</div><div class="th">User</div><div class="th">Age</div><div class="th">Decay</div></div>
+  ${eps.map(([id,content,uid,sid,age,w])=>`<div class="tbl-row" style="grid-template-columns:80px 1fr 90px 70px 80px">
+  <div class="td" style="font-family:var(--mono);font-size:11px;color:#3b6d11">${id}</div>
+  <div class="td" style="color:var(--text2);font-size:11px">${content}</div>
+  <div class="td" style="font-size:11px;font-family:var(--mono)">${uid}</div>
+  <div class="td" style="color:var(--text3)">${age}</div>
+  <div class="td"><div class="cb-bar"><div class="cb-track"><div class="cb-fill" style="width:${Math.round(w*100)}%;background:#3b6d11"></div></div><span style="font-size:11px">${w.toFixed(2)}</span></div></div>
+  </div>`).join('')}</div>`;}
+
+function epTimeline(){
+  const months=['Jul','Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr'];
+  const counts=[12,18,9,24,31,15,28,42,38,47];const max=Math.max(...counts);
+  return `<div class="card"><div class="card-title">Episodes per month</div>
+  <div style="display:flex;align-items:flex-end;gap:8px;height:80px;margin-bottom:6px">
+  ${months.map((m,i)=>`<div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:3px">
+  <div style="width:100%;border-radius:2px 2px 0 0;background:#eaf3de;border-top:2px solid #639922;height:${Math.round(counts[i]/max*70)}px"></div>
+  <div style="font-size:9px;color:var(--text3)">${m}</div></div>`).join('')}</div>
+  <div style="display:flex;gap:12px;font-size:11px;color:var(--text3)"><span>Total: 264 episodes</span><span>Users: 312</span><span>Range: Jul 2024 — now</span></div></div>
+  <div class="card"><div class="card-title">Point-in-time query</div>
+  <div style="display:flex;gap:8px;align-items:center"><span style="font-size:12px;color:var(--text2)">Show state as of:</span><input type="date" class="mi"/><button class="btn-dark">Query</button></div></div>`;}
+
+function epDecay(){return `<div class="card"><div class="card-title">Decay configuration</div>
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px"><span style="font-size:12px;color:var(--text2);min-width:80px">Decay rate</span><input type="range" min="1" max="20" value="5" style="flex:1" oninput="this.nextElementSibling.textContent=(this.value/100).toFixed(2)"/><span style="font-size:12px;font-weight:500;min-width:36px">0.05/d</span></div>
+<div style="display:flex;gap:8px"><button class="btn-dark">Run decay now</button><span style="font-size:11px;color:var(--text3);align-self:center">Last run: 6h ago</span></div></div>
+<div class="card"><div class="card-title">Decay impact preview</div>
+${[[0.91,'ep_312 — 2 days old'],[0.74,'ep_187 — 3 weeks old'],[0.31,'ep_044 — 2 months old'],[0.08,'ep_001 — 5 months old']].map(([w,name])=>`
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+<span style="font-size:11px;color:var(--text2);min-width:150px">${name}</span>
+<div class="decay-bar" style="flex:1"><div class="decay-fill" style="width:${Math.round(w*100)}%;background:${w>0.6?'#639922':w>0.3?'#ba7517':'#e24b4a'}"></div></div>
+<span style="font-size:11px;font-weight:500;color:${w>0.6?'#3b6d11':w>0.3?'#854f0b':'#a32d2d'};min-width:30px">${w.toFixed(2)}</span></div>`).join('')}</div>`;}
+
+// ── WORKING ───────────────────────────────────────
+function wkSessions(){
+  const sessions=[['session_abc','user_alice','43 keys','12m ago','Active'],['session_xyz','user_bob','12 keys','2m ago','Active'],['session_123','user_carol','7 keys','1h ago','Expiring'],['session_old','user_dave','3 keys','3h ago','Expired']];
+  return `<div style="display:flex;gap:7px;margin-bottom:10px"><input class="mi" style="flex:1" placeholder="Search by session_id or user_id…"/><button class="btn-xs">Active</button><button class="btn-xs">All</button></div>
+  <div class="tbl"><div class="tbl-head" style="grid-template-columns:1fr 100px 80px 80px 80px"><div class="th">Session ID</div><div class="th">User</div><div class="th">Keys</div><div class="th">Last active</div><div class="th">Status</div></div>
+  ${sessions.map(([sid,uid,keys,active,status])=>`<div class="tbl-row" style="grid-template-columns:1fr 100px 80px 80px 80px">
+  <div class="td" style="font-family:var(--mono);font-size:11px;color:#854f0b">${sid}</div>
+  <div class="td" style="font-family:var(--mono);font-size:11px">${uid}</div>
+  <div class="td">${keys}</div>
+  <div class="td" style="color:var(--text3)">${active}</div>
+  <div class="td"><span class="badge ${status==='Active'?'b-active':status==='Expiring'?'b-stale':''}"">${status}</span></div>
+  </div>`).join('')}</div>`;}
+
+function wkKeys(){return `<div style="display:flex;gap:7px;margin-bottom:10px"><input class="mi" style="flex:1" placeholder="Filter by key…"/><select class="ms"><option>session_abc</option><option>All sessions</option></select><button class="btn-dark">Set key</button></div>
+<div class="card"><div class="card-title">session_abc — user_alice <span style="font-size:10px;font-weight:400;color:var(--text3)">43 keys · expires 14m</span></div>
+${[['current_topic','"Обсуждаем контент-стратегию Q3"','14m 22s'],['user_mood','"anxious"','14m 22s'],['context_summary','"Пользователь маркетолог, KPI 500 лидов"','14m 22s'],['last_action','"asked about budget allocation"','14m 22s'],['__core__','{ user_profile: "Алексей, 34..." }','∞ persistent']].map(([k,v,ttl])=>`
+<div class="kv-row"><div class="kv-key">${k}</div><div class="kv-val">${v}</div><div class="kv-ttl">${ttl}</div><button class="btn-xs" style="font-size:10px">Del</button></div>`).join('')}</div>`;}
+
+// ── GRAPH ─────────────────────────────────────────
+function graphPlay(){return `<div class="two-col">
+<div><div class="card"><div class="card-title">Graph visualization</div>
+<div class="graph-vis">
+<svg width="100%" height="160" style="position:absolute;top:0;left:0">
+<line x1="120" y1="80" x2="220" y2="40" stroke="#d3d1c7" stroke-width="1"/><text x="165" y="52" font-size="8" fill="#888780" text-anchor="middle">enables</text>
+<line x1="120" y1="80" x2="220" y2="120" stroke="#d3d1c7" stroke-width="1"/><text x="165" y="112" font-size="8" fill="#888780" text-anchor="middle">depends_on</text>
+<line x1="220" y1="40" x2="330" y2="60" stroke="#d3d1c7" stroke-width="1"/>
+<line x1="220" y1="120" x2="330" y2="100" stroke="#d3d1c7" stroke-width="1"/>
+</svg>
+${[['120','80','MemoryService','#e6f1fb','#185fa5'],['220','40','API Layer','#eeedfe','#534ab7'],['220','120','Database','#eaf3de','#3b6d11'],['330','60','Rate Limiter','#faeeda','#854f0b'],['330','100','PostgreSQL','#faece7','#993c1d']].map(([x,y,name,bg,col])=>`
+<div class="gnode" style="left:${x}px;top:${y}px">
+<div class="gnode-circle" style="background:${bg};border-color:${col}"><div style="width:8px;height:8px;border-radius:50%;background:${col}"></div></div>
+<div class="gnode-label">${name}</div></div>`).join('')}
+</div>
+<div style="display:flex;gap:6px"><input class="mi" style="flex:1" placeholder="Start entity"/><select class="ms"><option>depth 2</option><option>depth 3</option></select><button class="btn-dark">Traverse</button></div>
+</div></div>
+<div><div class="card"><div class="card-title">Traverse result</div>
+<div class="qr-box" style="font-size:12px">MemoryService → (enables) → API Layer <span class="cit-inline" style="background:#faece7;color:#993c1d">[Entity:e_02]</span> → (depends_on) → Rate Limiter <span class="cit-inline" style="background:#faece7;color:#993c1d">[Entity:e_04]</span>. Path confidence: 0.87.</div>
+<div style="font-size:11px;color:var(--text3)">Depth: 2 · Relations: 3 · Entities: 4</div>
+</div>
+<div class="card"><div class="card-title">Ingest entity/relation</div>
+<textarea class="pg" rows="3" placeholder="Redis caches API responses for Rate Limiter (enables)"></textarea>
+<button class="btn-dark" style="margin-top:7px">Extract &amp; ingest</button>
+</div></div></div>`;}
+
+function graphEntities(){
+  const ents=[['MemoryService','product',0.98,3],['API Layer','component',0.91,2],['Rate Limiter','component',0.87,2],['Database','infrastructure',0.95,1],['PostgreSQL','infrastructure',0.93,1]];
+  const tc={product:'#185fa5',component:'#534ab7',infrastructure:'#3b6d11'};
+  const tb={product:'#e6f1fb',component:'#eeedfe',infrastructure:'#eaf3de'};
+  return `<div class="tbl"><div class="tbl-head" style="grid-template-columns:1fr 100px 110px 70px"><div class="th">Entity</div><div class="th">Type</div><div class="th">Confidence</div><div class="th">Relations</div></div>
+  ${ents.map(([name,type,conf,rels])=>`<div class="tbl-row" style="grid-template-columns:1fr 100px 110px 70px">
+  <div class="td" style="font-weight:500">${name}</div>
+  <div class="td"><span style="font-size:10px;background:${tb[type]};color:${tc[type]};padding:2px 6px;border-radius:3px;font-weight:500">${type}</span></div>
+  <div class="td"><div class="cb-bar"><div class="cb-track"><div class="cb-fill" style="width:${Math.round(conf*100)}%;background:#993c1d"></div></div><span style="font-size:11px">${conf.toFixed(2)}</span></div></div>
+  <div class="td">${rels}</div></div>`).join('')}</div>`;}
+
+function graphRelations(){
+  const rels=[['MemoryService','enables','API Layer',0.91,'active'],['API Layer','depends_on','Database',0.95,'active'],['Rate Limiter','part_of','API Layer',0.87,'active'],['Redis','enables','Rate Limiter',0.72,'disputed']];
+  return `<div class="tbl"><div class="tbl-head" style="grid-template-columns:1fr 100px 1fr 80px 80px"><div class="th">From</div><div class="th">Relation</div><div class="th">To</div><div class="th">Confidence</div><div class="th">State</div></div>
+  ${rels.map(([from,rel,to,conf,state])=>`<div class="tbl-row" style="grid-template-columns:1fr 100px 1fr 80px 80px">
+  <div class="td" style="font-weight:500">${from}</div>
+  <div class="td"><span style="font-size:10px;background:#faece7;color:#993c1d;padding:2px 6px;border-radius:3px;font-weight:500">${rel}</span></div>
+  <div class="td">${to}</div>
+  <div class="td"><div class="cb-bar"><div class="cb-track"><div class="cb-fill" style="width:${Math.round(conf*100)}%;background:#993c1d"></div></div><span style="font-size:11px">${conf.toFixed(2)}</span></div></div>
+  <div class="td"><span class="badge ${state==='active'?'b-active':'b-disputed'}">${state}</span></div></div>`).join('')}</div>`;}
+
+function graphRepair(){return `<div style="background:#fcebeb;border:1px solid #f09595;border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+<div><div style="font-size:13px;font-weight:500;color:#501313">4 items in repair queue</div><div style="font-size:11px;color:#791f1f">2 high priority — source invalidation detected</div></div>
+<button style="background:#a32d2d;color:#fff;border:none;border-radius:var(--radius);padding:5px 12px;font-size:12px;font-weight:500;cursor:pointer">Run invalidation</button>
+</div>
+<div class="tbl">
+${[{n:'Redis → Rate Limiter (enables)',r:'Source deleted — confidence dropped to 0.31',p:'H',pb:'#fcebeb',pc:'#a32d2d'},
+{n:'API Layer → PostgreSQL (depends_on)',r:'Contradicting evidence from source_789',p:'H',pb:'#fcebeb',pc:'#a32d2d'},
+{n:'MemoryService (entity)',r:'Description stale — last updated 45 days ago',p:'M',pb:'#faeeda',pc:'#ba7517'},
+{n:'Component → Infrastructure',r:'Weak evidence — single mention only',p:'L',pb:'#f1efe8',pc:'#5f5e5a'}].map(i=>`
+<div class="rq-row">
+<div class="rq-prio" style="background:${i.pb};color:${i.pc}">${i.p}</div>
+<div style="flex:1"><div style="font-size:12px;font-weight:500">${i.n}</div><div style="font-size:11px;color:var(--text3)">${i.r}</div></div>
+<button class="btn-xs">Resolve</button></div>`).join('')}
+</div>`;}
+
+// ── REFLECTIVE ────────────────────────────────────
+function refReactions(){
+  const rcts=[['frustration','explicit',0.82,'user_alice','2d ago'],['clarity','inferred',0.71,'user_alice','3d ago'],['anxiety','explicit',0.91,'user_bob','5d ago'],['determination','inferred',0.64,'user_carol','1w ago'],['overwhelmed','explicit',0.88,'user_alice','1w ago']];
+  return `<div style="display:flex;gap:7px;margin-bottom:10px"><input class="mi" style="flex:1" placeholder="Filter reactions…"/><button class="btn-xs">All</button><button class="btn-xs">Explicit</button><button class="btn-xs">Inferred</button></div>
+  <div class="tbl"><div class="tbl-head" style="grid-template-columns:1fr 80px 110px 90px 80px"><div class="th">Reaction state</div><div class="th">Epistemic</div><div class="th">User</div><div class="th">Intensity</div><div class="th">Age</div></div>
+  ${rcts.map(([state,ep,intensity,user,age])=>`<div class="tbl-row" style="grid-template-columns:1fr 80px 110px 90px 80px">
+  <div class="td" style="font-weight:500;gap:6px"><div style="width:6px;height:6px;border-radius:50%;background:#993556;flex-shrink:0"></div>${state}</div>
+  <div class="td"><span style="font-size:10px;background:${ep==='explicit'?'#eeedfe':'#f1efe8'};color:${ep==='explicit'?'#534ab7':'#5f5e5a'};padding:2px 6px;border-radius:3px;font-weight:500">${ep}</span></div>
+  <div class="td" style="font-family:var(--mono);font-size:11px">${user}</div>
+  <div class="td"><div class="cb-bar"><div class="cb-track"><div class="cb-fill" style="width:${Math.round(intensity*100)}%;background:#993556"></div></div><span style="font-size:11px">${intensity.toFixed(2)}</span></div></div>
+  <div class="td" style="color:var(--text3)">${age}</div></div>`).join('')}</div>`;}
+
+function refPatterns(){return [
+  {n:'Stress peaks before deadlines',ev:7,conf:0.87,d:'User shows frustration + overwhelmed reactions in the 3 days before reported deadlines. Detected across 7 episodes, 3 months history.',t:false},
+  {n:'Creative clarity after physical rest',ev:4,conf:0.79,d:'Clarity and inspiration appear after episodes mentioning exercise or good sleep. Cross-user pattern validated.',t:false},
+  {n:'Avoidance of financial topics',ev:5,conf:0.71,d:'User deflects or shows anxiety when budget topics arise. Inferred from topic-concept co-occurrence.',t:true},
+].map(p=>`<div class="pattern-card">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+<div><div class="pc-name">${p.n}</div><div class="pc-ev">${p.ev} episodes · confidence ${p.conf.toFixed(2)}</div></div>
+<span class="badge ${p.t?'b-stale':'b-active'}">${p.t?'tension':'pattern'}</span>
+</div>
+<div class="pc-desc">${p.d}</div>
+<div style="display:flex;gap:6px"><button class="btn-xs">View episodes</button><button class="btn-xs">Add to core memory</button></div>
+</div>`).join('');}
+
+function refTensions(){return [
+  {t:'Autonomy vs. accountability',d:'User expresses desire for independence but shows anxiety when not reporting progress. Contradictory drive across 5 episodes.',ep:5,state:'unresolved'},
+  {t:'Growth vs. stability',d:'Inspiration when discussing new projects conflicts with overwhelmed reactions when scope expands.',ep:4,state:'unresolved'},
+  {t:'Perfectionism vs. speed',d:'Frustration appears both when quality is low AND when deadline pressure forces quick decisions.',ep:3,state:'monitoring'},
+].map(t=>`<div class="pattern-card" style="border-color:${t.state==='unresolved'?'#f7c1c1':'var(--border)'}">
+<div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:4px">
+<div><div class="pc-name">${t.t}</div><div class="pc-ev">${t.ep} episodes</div></div>
+<span class="badge ${t.state==='unresolved'?'b-disputed':'b-stale'}">${t.state}</span>
+</div>
+<div class="pc-desc">${t.d}</div>
+<div style="display:flex;gap:6px"><button class="btn-xs">View evidence</button><button class="btn-xs">Mark resolved</button></div>
+</div>`).join('');}
+
+function refLog(){
+  const acts=[['create','Stress peaks before deadlines','worker:reflective','≥3 cross-episode evidence confirmed — pattern created','#eaf3de','#3b6d11'],['attach','Stress peaks before deadlines','worker:reflective','New anxiety reaction ep_312 strengthens evidence, confidence ↑0.08','#e6f1fb','#185fa5'],['create','Avoidance of financial topics','worker:reflective','Inferred pattern from reaction + topic co-occurrence','#eaf3de','#3b6d11'],['reject',null,'worker:reflective','Single-episode frustration — insufficient evidence (need ≥3)','#f1efe8','#5f5e5a']];
+  return `<div class="tbl">${acts.map(([act,c,actor,rat,bg,col])=>`<div class="log-row">
+  <div class="log-icon" style="background:${bg}"><div style="width:8px;height:8px;border-radius:50%;background:${col}"></div></div>
+  <div style="flex:1"><div class="log-act"><span class="ap ap-${act}">${act}</span>${c?`<strong>${c}</strong>`:'candidate → residuals'}</div><div class="log-rat">${rat}</div><div class="log-meta">${actor} · just now</div></div>
+  </div>`).join('')}</div>`;}
+
+// ── AGENT ─────────────────────────────────────────
+function agentPlay(){return `<div class="two-col">
+<div><div class="card"><div class="card-title">Unified query — all layers</div>
+<textarea class="pg" rows="4" placeholder="Какие техники мы обсуждали для борьбы со стрессом?"></textarea>
+<div style="display:flex;gap:6px;margin-top:7px"><input class="mi" style="flex:1" placeholder="user_id"/><input class="mi" style="flex:1" placeholder="session_id"/><button class="btn-dark">Query all</button></div>
+</div>
+<div class="card"><div class="card-title">Layer retrieval status</div>
+${[['Working','session','#faeeda','#854f0b','✓ 3 entries'],['Episodic','user_history','#eaf3de','#3b6d11','✓ 5 episodes'],['RAG','knowledge','#e6f1fb','#185fa5','✓ 8 chunks'],['Reflective','psychology','#f1efe8','#5f5e5a','✗ paused']].map(([type,role,bg,col,result])=>`
+<div style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border)">
+<div style="width:18px;height:18px;border-radius:4px;background:${bg};display:flex;align-items:center;justify-content:center;flex-shrink:0"><div style="width:6px;height:6px;border-radius:50%;background:${col}"></div></div>
+<span style="font-size:12px;font-weight:500;flex:1">${type}</span>
+<span style="font-size:10px;color:var(--text3)">${role}</span>
+<span style="font-size:11px;color:${result.startsWith('✓')?'#3b6d11':'#5f5e5a'}">${result}</span>
+</div>`).join('')}
+<div style="margin-top:7px;font-size:11px;color:var(--text3)">Strategy: weighted · claude-sonnet-4 · 1.85s total</div>
+</div></div>
+<div><div class="card"><div class="card-title">Synthesized answer</div>
+<div class="qr-box">Три техники. Прогрессивная мышечная релаксация <span class="cit-inline" style="background:#e6f1fb;color:#185fa5">[RAG:chunk_34]</span> упоминалась на прошлой сессии <span class="cit-inline" style="background:#eaf3de;color:#3b6d11">[Ep:ep_187]</span>. Дыхательные упражнения 4-7-8 <span class="cit-inline" style="background:#e6f1fb;color:#185fa5">[RAG:chunk_12]</span>. Паттерн тревоги перед дедлайнами <span class="cit-inline" style="background:#fbeaf0;color:#993556">[Ref:pattern_02]</span>.</div>
+${[['RAG','#e6f1fb','#185fa5','chunk_34','Прогрессивная мышечная релаксация','0.92'],['Episodic','#eaf3de','#3b6d11','ep_187','Пользователь использовал дыхание 4-7-8 ранее','0.88'],['RAG','#e6f1fb','#185fa5','chunk_12','Техника 4-7-8 — инструкция из базы','0.81'],['Reflective','#fbeaf0','#993556','pattern_02','Тревога перед дедлайнами — паттерн 7 эп.','0.74']].map(([t,bg,col,id,tx,sc])=>`
+<div class="cit-row"><span class="cb" style="background:${bg};color:${col}">${t}</span><span style="font-size:11px;color:var(--text2);flex:1">${tx}</span><span style="font-size:10px;color:var(--text3)">${sc}</span></div>`).join('')}
+<div style="margin-top:8px;padding:6px 8px;background:var(--bg2);border-radius:5px;font-size:11px;color:var(--text3)">3200 input · 450 output tokens · confidence 0.85</div>
+</div></div></div>`;}
+
+function agentLayers(){
+  const layers=[
+    {n:'Session Context',type:'Working',role:'session',prio:1,bg:'#faeeda',col:'#854f0b',on:true,queries:43,health:0.94},
+    {n:'Coach Bot History',type:'Episodic',role:'user_history',prio:2,bg:'#eaf3de',col:'#3b6d11',on:true,queries:89,health:0.91},
+    {n:'FAQ Knowledge Base',type:'RAG',role:'knowledge',prio:3,bg:'#e6f1fb',col:'#185fa5',on:true,queries:312,health:0.88},
+    {n:'User Patterns',type:'Reflective',role:'psychology',prio:4,bg:'#fbeaf0',col:'#993556',on:false,queries:0,health:null},
+  ];
+  return layers.map(l=>`<div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:12px 14px;margin-bottom:8px;${!l.on?'opacity:.55':''}">
+  <div style="display:flex;align-items:center;gap:10px">
+  <div class="lv-prio">${l.prio}</div>
+  <div class="lv-icon" style="background:${l.bg}"><div style="width:8px;height:8px;border-radius:50%;background:${l.col}"></div></div>
+  <div style="flex:1"><div style="font-size:13px;font-weight:500">${l.n}</div><div style="font-size:11px;color:var(--text3)">${l.type} · role: ${l.role}</div></div>
+  ${l.health!==null?`<div style="text-align:right;margin-right:8px"><div style="font-size:10px;color:var(--text3)">health</div><div style="font-size:13px;font-weight:500;color:#3b6d11">${l.health.toFixed(2)}</div></div>`:''}
+  <div style="font-size:11px;color:var(--text3);margin-right:8px">${l.queries} q/day</div>
+  <div class="tgl ${l.on?'on':'off'}"></div>
+  </div>
+  ${l.on?`<div style="margin-top:7px;display:flex;align-items:center;gap:6px">
+  <span style="font-size:10px;color:var(--text3)">weight</span>
+  <input type="range" min="0" max="100" value="${[30,30,25,15][l.prio-1]}" style="flex:1;max-width:120px"/>
+  <span style="font-size:11px;font-weight:500">${['0.30','0.30','0.25','0.15'][l.prio-1]}</span>
+  <button class="btn-xs" style="margin-left:auto">Detach</button></div>`
+  :`<div style="margin-top:5px;font-size:11px;color:var(--text3)">Layer paused</div>`}
+  </div>`).join('')+`<button class="btn-xs dark" style="margin-top:4px;font-size:12px;padding:6px 14px">+ Attach instance as layer</button>`;}
+
+function agentHealth(){return `<div class="two-col">
+<div>
+<div class="card"><div class="card-title">Layer health</div>
+${[['Working · session',0.94,'g'],['Episodic · user_history',0.91,'g'],['RAG · knowledge',0.88,'g'],['Reflective · psychology',null,'p']].map(([n,h,s])=>`
+<div class="hrow" style="margin-bottom:7px"><span class="hl" style="width:160px;font-size:11px;white-space:nowrap">${n}</span>
+${h!==null?`<div class="ht"><div class="hf hf-g" style="width:${Math.round(h*100)}%"></div></div><span class="hv hv-g">${h.toFixed(2)}</span>`:`<span style="font-size:11px;color:var(--text3)">— paused</span>`}
+</div>`).join('')}</div>
+<div class="card"><div class="card-title">Synthesis</div>
+${[['Model','claude-sonnet-4'],['Strategy','weighted'],['Max context','8,000 tokens'],['Avg latency','1.85s']].map(([k,v])=>`
+<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text3)">${k}</span><span style="font-weight:500">${v}</span></div>`).join('')}
+</div></div>
+<div><div class="card"><div class="card-title">Query performance — 7 days</div>
+${[['Mon',420],['Tue',380],['Wed',510],['Thu',490],['Fri',620],['Sat',280],['Sun',195]].map(([day,val])=>`
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+<span style="font-size:11px;color:var(--text3);width:24px">${day}</span>
+<div style="flex:1;height:12px;background:var(--bg2);border-radius:2px;overflow:hidden"><div style="height:100%;background:#1a1a1a;border-radius:2px;width:${Math.round(val/620*100)}%;opacity:.8"></div></div>
+<span style="font-size:11px;color:var(--text2);min-width:28px;text-align:right">${val}</span></div>`).join('')}
+<div style="margin-top:7px;font-size:11px;color:var(--text3)">Total 2,895 queries · avg 1.85s · 0.89 confidence</div>
+</div></div></div>`;}
+
+function genericSettings(){return `<div class="two-col">
+<div class="card"><div class="card-title">Basic</div>
+${[['Name','Product Knowledge Base'],['Type',types[curType].label],['Created','May 1, 2026'],['Instance ID','inst_abc123']].map(([k,v])=>`
+<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px"><span style="color:var(--text3)">${k}</span><span style="font-weight:500">${v}</span></div>`).join('')}</div>
+<div class="card"><div class="card-title">Danger zone</div>
+<div style="font-size:12px;color:var(--text2);margin-bottom:10px">Pausing stops all operations. Deleting is permanent.</div>
+<div style="display:flex;gap:7px"><button class="btn-xs">Pause instance</button><button class="btn-xs" style="color:#a32d2d;border-color:#f09595">Delete instance</button></div>
+</div></div>`;}
+
+// Init
+setType('rag');
+</script>
+</body>
+</html>

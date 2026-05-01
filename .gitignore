@@ -1,0 +1,36 @@
+# Environment
+.env
+.env.local
+.env.production
+
+# Go
+/backend/tmp/
+/backend/server
+
+# Node
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SSL
+nginx/ssl/*.pem
+nginx/ssl/*.key
+
+# WordPress uploads
+wordpress/uploads/
+
+# Logs & backups
+*.log
+backups/

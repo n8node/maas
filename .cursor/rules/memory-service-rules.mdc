@@ -1,0 +1,507 @@
+---
+description: Memory-as-a-Service Platform — полные правила разработки
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Memory-as-a-Service (MaaS) Platform
+
+## Обзор проекта
+
+Платформа предоставляет API для создания и управления различными типами памяти для AI-агентов.
+Разработчик создаёт инстанс нужного типа памяти и подключается к нему по REST API.
+
+Ключевой принцип: **retrieval ≠ память.** Retrieval отвечает на вопрос «какие фрагменты похожи на запрос».
+Память отвечает на более жёсткие вопросы: какие объекты знания существуют, как они связаны
+со своими источниками, как они меняются во времени, какие правила ревизии допустимы,
+и как обнаруживать собственную деградацию.
+
+### Типы памяти
+
+1. **RAG** — векторный поиск по загруженным документам с опциональной иерархической кластеризацией
+2. **Wiki** — компилирующая база знаний на основе Concept Hypotheses с перекрёстными ссылками, синтезом, обнаружением противоречий и полным lineage до источника
+3. **Episodic** — хронологическая память с decay (угасанием старых записей) и bi-temporal фактами
+4. **Working** — краткосрочная память текущей задачи агента (key-value с TTL)
+5. **Graph** — сущности и типизированные связи с онтологией, invalidation и repair
+6. **Reflective** — извлечение эмоциональных, мотивационных и поведенческих паттернов из длинной истории взаимодействий
+
+### Стек
+
+- **Backend:** Go 1.23+
+- **Frontend:** Next.js 15+ (App Router), TypeScript, Tailwind CSS
+- **Database:** PostgreSQL 16+ с расширениями pgvector и Apache AGE
+- **LLM Provider:** OpenRouter (chat + embeddings через единый API)
+- **Reverse Proxy:** Nginx (внутри Docker)
+- **Контейнеризация:** Docker + Docker Compose
+- **Очереди (production):** NATS JetStream
+- **Кэш (production):** DragonflyDB
+- **Object Storage (production):** MinIO
+
+---
+
+## Фундаментальные архитектурные принципы
+
+### 1. Lineage (Provenance) — цепочка доказуемости
+
+Каждое утверждение системы должно иметь восстанавливаемую цепочку:
+
+```
+source text → source_id → segment → mention → canonical concept → answer
+```
+
+Если это звено рвётся хоть в одной точке, память превращается в narrative generator.
+Все типы памяти ОБЯЗАНЫ сохранять привязку к source_id на каждом этапе обработки.
+Ответы query endpoint ОБЯЗАНЫ содержать citations в формате `[Concept:ID]` или `[Source:UUID]`.
+
+### 2. Concept Hypothesis — базовая единица знания
+
+Для типов Wiki, Graph и Reflective базовой единицей знания является НЕ текстовый чанк,
+а **Concept Hypothesis** — ревизуемый эпистемический объект:
+
+```go
+// internal/model/concept.go
+
+type ConceptHypothesis struct {
+    ID            string            `json:"concept_id"`
+    InstanceID    string            `json:"instance_id"`
+    Title         string            `json:"title"`
+    Type          ConceptType       `json:"type"`          // behavioral_pattern, project, event, tension, goal, belief, entity, fact
+    Description   string            `json:"description"`
+    State         ConceptState      `json:"state"`         // active, weak, merged, split, archived, stale, disputed
+    Confidence    float64           `json:"confidence"`    // 0.0 - 1.0, capped by surviving evidence
+    Aliases       []string          `json:"aliases"`
+    EvidenceSpans []EvidenceSpan    `json:"evidence_spans"`
+    Relations     []ConceptRelation `json:"relations"`
+    RevisionCount int               `json:"revision_count"`
+    FirstSeen     time.Time         `json:"first_seen"`
+    LastSeen      time.Time         `json:"last_seen"`
+    ValidFrom     *time.Time        `json:"valid_from"`    // bi-temporal: когда факт стал истинным
+    ValidUntil    *time.Time        `json:"valid_until"`   // bi-temporal: NULL = currently valid
+}
+
+type EvidenceSpan struct {
+    SourceID   string  `json:"source_id"`
+    SegmentID  string  `json:"segment_id"`
+    Text       string  `json:"text"`
+    Confidence float64 `json:"confidence"`
+}
+
+type ConceptRelation struct {
+    TargetID   string `json:"target_id"`
+    Relation   string `json:"relation"`   // causes, conflicts_with, supports, instance_of, enables, depends_on, evolved_into, part_of
+    Confidence float64 `json:"confidence"`
+}
+```
+
+### 3. Concept Memory Loop — create / attach / refine / reject
+
+При ingest новых данных в Wiki, Graph и Reflective используется цикл:
+
+1. **Extraction** — LLM извлекает candidate concepts, evidence spans, types, relations (SGR, дешёвая модель)
+2. **Retrieval** — поиск top-k ближайших объектов из текущей памяти (семантика + лексика + граф + время)
+3. **Router** — по каждому кандидату одно из решений:
+   - `create` — новый concept hypothesis
+   - `attach` — добавить evidence к существующему
+   - `refine` — переписать описание / алиасы / confidence
+   - `reject` — отбросить в residuals
+4. **ActionLog** — каждое действие пишется в append-only журнал
+5. **Residuals** — отвергнутые кандидаты НЕ удаляются, а уходят в пул для offline-анализа Gardener'ом
+
+Опасные операции (`merge`, `split`, `archive`) выполняются ТОЛЬКО через Gardener в offline-режиме.
+
+### 4. SGR (Schema-Guided Reasoning) — правила для extraction
+
+Критическое правило (доказано на 300+ промптах, Superagent Memory OS):
+**на extraction задачах высокий reasoning_effort ЛОМАЕТ результат.**
+
+Модель с высоким reasoning «улучшает» схему вместо того чтобы исполнить:
+объединяет объекты, меняет имена полей, сглаживает различия между типами.
+
+Правила:
+- ДЕШЁВАЯ быстрая модель с НИЗКИМ reasoning для extraction (Gemini Flash, Haiku)
+- JSON Schema как `response_format` (constrained decoding)
+- Все поля обязательны (`required`), никаких `Optional`, никаких `default`
+- Пустые значения: модель возвращает `""` или `[]`, а не пропускает поле
+- `additionalProperties: false` на каждом object-узле
+- Валидатор рекурсивно проверяет `properties` == `required`
+- Результат: стоимость −48%, качество +36%
+
+Для compilation/synthesis/gardening — УМНАЯ модель (Sonnet, GPT-4.1).
+
+### 5. Bi-temporal Facts
+
+Для ревизуемых фактов храним два времени:
+- **Valid time** — когда факт был истинным в реальном мире
+- **System time** — когда система факт записала
+
+Текущий вид: `WHERE valid_until IS NULL`
+Историческая проекция: `WHERE valid_from <= $date AND (valid_until IS NULL OR valid_until > $date)`
+
+### 6. Invalidation и Repair
+
+Каждый concept hypothesis имеет trust state: `active → stale → disputed → weakened → broken → archived`
+
+Правила:
+1. Изменился source → зависимые claims помечаются `stale` / `disputed`
+2. Hypothesis обновляет счётчики evidence
+3. **Confidence capping** — confidence НЕ МОЖЕТ быть выше чем поддерживается выжившим evidence
+4. Hypothesis в `weakened/disputed/broken/stale` → в RepairQueue
+
+### 7. Gardener — maintenance как отдельный контур
+
+**Phase 0 — Global Triage** (дешёвая модель, batch):
+- Выход: JSON с merge_candidates, split_candidates, noise_candidates
+- Phase 0 = Proposals, НЕ мутации. Пишутся в `pending_review`
+
+**Phase 1 — Surgical Refactoring** (ТОЛЬКО умная модель):
+- Action space: `refine_concept`, `merge_concepts`, `split_concept`, `create_relation`
+- ОБЯЗАН вызывать read_source при неоднозначности
+- Каждое действие = GardenerAction с rationale для аудита и rollback
+- Дешёвая модель ЗАПРЕЩЕНА: +113% redundancy, +144% errors (доказано EXP-GARDENER-001)
+
+### 8. Graph Sludge — антипаттерн
+
+Признаки: узлы без evidence_spans, концепты без source_id, отсутствие хронологических связей,
+дубли с разными именами, confidence=1.0 у всех узлов.
+Защита: lineage enforcement, mandatory evidence grounding, lint checks.
+
+---
+
+## Метрики качества памяти
+
+Для Wiki/Graph/Reflective доступны через `GET /api/v1/instances/:id/health`:
+
+| Метрика | Описание | Цель |
+|---------|----------|------|
+| coverage | Доля корпуса, покрытая концептами | >80% |
+| high_confidence_coverage | confidence >0.7 | >50% |
+| concept_purity | Гомогенность evidence внутри концепта | >0.70 |
+| concept_churn | Частота merge/split | Стабильная |
+| evidence_grounding | Доля утверждений с source_id | 100% |
+| anchored_rate | Доля сегментов связанных с concepts | >60% |
+| stale_ratio | Доля stale/disputed концептов | <10% |
+
+---
+
+## Структура проекта
+
+```
+memory-service/
+├── docker-compose.yml
+├── docker-compose.prod.yml
+├── .env.example
+├── .env
+├── .gitignore
+├── Makefile
+├── nginx/
+│   ├── Dockerfile
+│   ├── nginx.conf
+│   ├── conf.d/
+│   │   └── default.conf
+│   └── ssl/
+├── wordpress/
+│   ├── Dockerfile
+│   ├── wp-content/
+│   │   ├── themes/memoryservice/
+│   │   └── plugins/
+│   └── uploads/
+├── backend/
+│   ├── Dockerfile
+│   ├── Dockerfile.dev
+│   ├── go.mod
+│   ├── go.sum
+│   ├── cmd/server/main.go
+│   ├── internal/
+│   │   ├── config/config.go
+│   │   ├── server/server.go
+│   │   ├── middleware/         # auth, ratelimit, cors, logging
+│   │   ├── handler/            # instance, rag, wiki, episodic, working, graph, reflective, billing, health
+│   │   ├── service/            # instance, rag, wiki, episodic, working, graph, reflective, billing
+│   │   ├── repository/         # postgres, instance, rag, concept, episodic, working, evidence, action_log, billing
+│   │   ├── ontology/           # types.go, schema.go (JSON Schema для SGR), validator.go
+│   │   ├── llm/                # openrouter.go, prompts.go, models.go, sgr.go
+│   │   ├── worker/             # manager, rag_ingest, concept_extract, concept_router, wiki_compile, gardener_triage, gardener_refactor, invalidation, episodic_decay, graph_extract, reflective_extract
+│   │   ├── model/              # instance, document, concept, action_log, reaction, user, billing
+│   │   └── pkg/                # chunker, markdown, validator
+│   ├── migrations/
+│   └── tests/
+├── frontend/
+│   ├── Dockerfile
+│   ├── Dockerfile.dev
+│   ├── next.config.ts          # basePath: '/dashboard'
+│   ├── src/
+│   │   ├── app/                # layout, page, login, register, instances/[id]/{health,concepts,playground,settings}, billing, api-keys, docs
+│   │   ├── components/         # ui, layout, instances, concepts, health, billing, docs
+│   │   ├── lib/                # api.ts, auth.ts, utils.ts
+│   │   └── types/
+│   └── public/
+└── scripts/
+```
+
+---
+
+## Правила Go Backend
+
+- HTTP-роутер: `chi`. НЕ gin, echo, fiber.
+- PostgreSQL: `pgx/v5`. НЕ lib/pq.
+- Миграции: `goose`.
+- Логирование: `slog`.
+- НЕ используй ORM. SQL напрямую через pgx.
+- Слои: handler → service → repository. Строгое разделение.
+- Все зависимости через конструкторы (DI без фреймворков).
+- `context.Context` первым аргументом всегда.
+- Ошибки: `fmt.Errorf("описание: %w", err)`. Никогда не panic.
+
+### Ответы API
+
+```json
+{ "data": { ... }, "meta": { "request_id": "...", "timestamp": "..." } }
+{ "error": { "code": "...", "message": "...", "details": {} }, "meta": { ... } }
+{ "data": [ ... ], "meta": { "total": 100, "page": 1, "per_page": 20 } }
+```
+
+### OpenRouter модели
+
+```
+OPENROUTER_MODEL_EXTRACT=google/gemini-2.5-flash        # ДЕШЁВАЯ, низкий reasoning
+OPENROUTER_MODEL_COMPILE=anthropic/claude-sonnet-4       # УМНАЯ
+OPENROUTER_MODEL_GARDENER=anthropic/claude-sonnet-4      # ТОЛЬКО УМНАЯ
+OPENROUTER_MODEL_REFLECTIVE=anthropic/claude-sonnet-4    # УМНАЯ
+OPENROUTER_MODEL_EMBED=openai/text-embedding-3-large     # Эмбеддинги
+```
+
+НЕ используй умную модель для extraction. НЕ используй дешёвую для gardener.
+
+### Workers
+
+```go
+type WorkerManager struct {
+    ragIngest         chan IngestTask
+    conceptExtract    chan ExtractTask        // SGR extraction
+    conceptRoute      chan RouteTask          // create/attach/refine/reject
+    wikiCompile       chan CompileTask
+    gardenerTriage    chan TriageTask         // Phase 0
+    gardenerRefactor  chan RefactorTask       // Phase 1
+    invalidation      chan InvalidationTask
+    episodicDecay     chan DecayTask
+    graphExtract      chan GraphExtractTask
+    reflectiveExtract chan ReflectiveTask
+}
+// Каждый воркер логирует LLM-вызовы в usage_log
+// Каждая мутация концепта — в action_log
+// Handler НИКОГДА не вызывает LLM синхронно (кроме query)
+```
+
+---
+
+## Миграции PostgreSQL
+
+```sql
+-- 001_init: users, api_keys, memory_instances (type IN rag/wiki/episodic/working/graph/reflective), usage_log
+-- 002_pgvector: rag_chunks (embedding vector(3072)), rag_topics, rag_topic_chunks
+-- 003_concepts: sources, segments (embedding), concepts (state, confidence, bi-temporal valid_from/valid_until, embedding),
+--               evidence_spans (concept_id→source_id→segment_id), concept_relations (typed),
+--               mentions (staging, consolidated_concept_id nullable, router_decision),
+--               residuals (rejected mentions for offline analysis)
+-- 004_episodic: episodic_memories (decay_weight, bi-temporal valid_from/valid_until)
+-- 005_working: working_memory (session_id, key, value JSONB, expires_at, UNIQUE(instance,session,key))
+-- 006_graph_age: CREATE EXTENSION age; -- graphs created dynamically per instance
+-- 007_reflective: user_reactions (state from controlled vocabulary of 12 values,
+--                 intensity float, valence, epistemic_status explicit/inferred,
+--                 evidence_source_id, topic_concept_id)
+-- 008_action_log: action_log (actor, action, target_concept_id, rationale, evidence_ids)
+-- 009_gardener: gardener_proposals (type, candidate_ids, status pending/approved/rejected/executed),
+--              repair_queue (concept_id, reason, priority, status)
+```
+
+Key constraints:
+- concepts.confidence CHECK (0..1), capped by evidence
+- concepts.state IN (active, weak, merged, split, archived, stale, disputed)
+- user_reactions.state IN (frustration, anxiety, exhaustion, clarity, inspiration, joy, confusion, neutral, determination, overwhelmed, insight, other)
+- user_reactions.epistemic_status IN (explicit, inferred) — модель ОБЯЗАНА различать наблюдаемое и интерпретируемое
+- Reflective concepts (behavioral_pattern, tension) создаются ТОЛЬКО при ≥3 cross-episode evidence
+
+---
+
+## API Endpoints
+
+```
+POST   /api/v1/instances                    # Создать инстанс
+GET    /api/v1/instances                    # Список
+GET    /api/v1/instances/:id                # Детали
+PATCH  /api/v1/instances/:id                # Обновить
+DELETE /api/v1/instances/:id                # Удалить
+
+POST   /api/v1/instances/:id/ingest         # Загрузить данные
+POST   /api/v1/instances/:id/query          # Запрос (ответ с citations)
+DELETE /api/v1/instances/:id/data/:data_id  # Удалить запись
+GET    /api/v1/instances/:id/health         # Метрики качества (coverage, purity, stale_ratio)
+
+# RAG
+GET    /api/v1/instances/:id/documents
+GET    /api/v1/instances/:id/topics         # Иерархические кластеры
+
+# Wiki
+GET    /api/v1/instances/:id/concepts       # Concept hypotheses
+GET    /api/v1/instances/:id/concepts/:cid  # Детали с evidence и relations
+GET    /api/v1/instances/:id/pages          # Скомпилированные wiki-страницы
+GET    /api/v1/instances/:id/pages/:slug
+POST   /api/v1/instances/:id/lint           # Gardener triage
+GET    /api/v1/instances/:id/proposals      # Gardener proposals
+POST   /api/v1/instances/:id/proposals/:pid # Approve/reject
+GET    /api/v1/instances/:id/action-log     # История операций
+
+# Episodic
+GET    /api/v1/instances/:id/episodes
+POST   /api/v1/instances/:id/decay
+GET    /api/v1/instances/:id/timeline       # Bi-temporal view
+
+# Working
+GET    /api/v1/instances/:id/sessions/:sid
+PUT    /api/v1/instances/:id/sessions/:sid
+DELETE /api/v1/instances/:id/sessions/:sid
+
+# Graph
+GET    /api/v1/instances/:id/entities
+GET    /api/v1/instances/:id/entities/:eid
+POST   /api/v1/instances/:id/traverse
+GET    /api/v1/instances/:id/repair-queue
+
+# Reflective
+GET    /api/v1/instances/:id/reactions      # UserReactions
+GET    /api/v1/instances/:id/patterns       # behavioral_pattern concepts
+GET    /api/v1/instances/:id/tensions       # tension concepts
+
+# Биллинг
+GET    /api/v1/usage
+GET    /api/v1/usage/instances/:id
+```
+
+---
+
+## Схема роутинга
+
+```
+https://mnemoniqa.com/                    → WordPress (лендинг)
+https://mnemoniqa.com/pricing             → WordPress
+https://mnemoniqa.com/blog                → WordPress
+https://mnemoniqa.com/wp-admin/           → WordPress
+https://mnemoniqa.com/dashboard           → Next.js (basePath=/dashboard)
+https://mnemoniqa.com/dashboard/...       → Next.js
+https://mnemoniqa.com/api/v1/...          → Go backend
+https://mnemoniqa.com/health              → Go backend
+```
+
+---
+
+## Next.js Frontend
+
+- App Router, TypeScript strict, Tailwind CSS, shadcn/ui
+- `nuqs` для URL state, `zustand` только если нужен клиентский стейт
+- `react-hook-form` + `zod`, `lucide-react`
+- Server Components по умолчанию, `"use client"` = исключение
+- **Светлая тема по умолчанию.** Лаконичный дизайн. Без декора.
+- Ориентир: Stripe Dashboard, Linear, Planetscale
+
+```typescript
+// next.config.ts
+const nextConfig: NextConfig = { basePath: '/dashboard', output: 'standalone' }
+```
+
+---
+
+## Docker
+
+### Development: nginx + backend + frontend + wordpress + postgres + mysql
+### Production: + nats + dragonfly + minio, replicas, resource limits
+
+Nginx конфиг:
+- `/api/` → backend:8080 (timeout 120s, body 50M)
+- `/dashboard` → frontend:3000 (websocket upgrade)
+- `/_next/` → frontend (cache 365d)
+- `/wp-admin/`, `/wp-content/`, `/wp-includes/`, `/wp-json/`, `/wp-login.php` → wordpress
+- `/` → wordpress (всё остальное)
+
+Backend Dockerfile: multi-stage Go build, alpine runner.
+Frontend Dockerfile: multi-stage node build, standalone output.
+WordPress Dockerfile: wordpress:6-php8.3-apache + wp-cli.
+Nginx Dockerfile: nginx:1.27-alpine.
+
+---
+
+## Переменные окружения
+
+```bash
+POSTGRES_HOST, POSTGRES_PORT, POSTGRES_DB, POSTGRES_USER, POSTGRES_PASSWORD
+OPENROUTER_API_KEY, OPENROUTER_BASE_URL
+OPENROUTER_MODEL_EXTRACT, OPENROUTER_MODEL_COMPILE, OPENROUTER_MODEL_GARDENER, OPENROUTER_MODEL_REFLECTIVE, OPENROUTER_MODEL_EMBED
+SERVER_PORT, JWT_SECRET, API_KEY_SALT, ENVIRONMENT, LOG_LEVEL
+NEXT_PUBLIC_API_URL=/api/v1, NEXT_PUBLIC_APP_NAME
+WP_DB_NAME, WP_DB_USER, WP_DB_PASSWORD, WP_DB_ROOT_PASSWORD
+WORKER_RAG_CONCURRENCY, WORKER_EXTRACT_CONCURRENCY, WORKER_ROUTE_CONCURRENCY
+WORKER_COMPILE_CONCURRENCY, WORKER_GARDENER_CONCURRENCY, WORKER_REFLECTIVE_CONCURRENCY
+```
+
+---
+
+## Правила разработки
+
+- Conventional commits на английском. Ветки: main, develop, feat/xxx, fix/xxx.
+- .env НИКОГДА в git.
+- API-ключи: SHA-256 + salt. Пароли: bcrypt cost 12.
+- Rate limiting: 100/min auth, 10/min unauth.
+- SQL: только параметризованные запросы.
+- Reflective data: изолирована, отдельные retention/purge политики.
+- Тесты: `testing` + `testify/assert`, `testcontainers-go`, покрытие >70% service.
+- Тесты lineage: каждый concept ОБЯЗАН иметь evidence_spans → source_id.
+
+---
+
+## Порядок разработки
+
+### Фаза 1: Скелет (Docker Compose, health endpoint, WordPress лендинг)
+### Фаза 2: Аутентификация (JWT, API-ключи, фронтенд)
+### Фаза 3: RAG-память (ingest, query с citations, playground)
+### Фаза 4: Wiki-память
+- Sources/Segments/lineage
+- Extraction воркер (SGR, дешёвая модель) → mentions
+- Router воркер (create/attach/refine/reject) → concepts + action_log
+- Compile воркер → wiki pages
+- Query с citations
+- Health endpoint (coverage, purity, stale_ratio)
+### Фаза 5: Gardener
+- Phase 0 triage → proposals
+- Proposals API (approve/reject)
+- Phase 1 refactoring (умная модель)
+- Invalidation + repair queue
+### Фаза 6: Остальные типы
+- Episodic (decay + bi-temporal)
+- Working (key-value + TTL)
+- Graph (AGE + repair queue)
+- Reflective (UserReactions + patterns + tensions)
+### Фаза 7: Биллинг и production (usage, limits, NATS, SSL, мониторинг)
+
+---
+
+## Критические правила (НИКОГДА не нарушай)
+
+1. **Nginx ВСЕГДА внутри Docker.**
+2. **PostgreSQL и MySQL порты НЕ наружу** в production.
+3. **Все LLM — только через OpenRouter.**
+4. **Фоновые LLM — через воркеры.** Handler НЕ вызывает LLM синхронно (кроме query).
+5. **Каждый LLM-вызов → usage_log** (токены, модель, стоимость).
+6. **Каждая мутация концепта → action_log** (actor, action, rationale, evidence_ids).
+7. **Секреты — только env.** Ничего в коде.
+8. **SQL — только pgx с параметризацией.**
+9. **Фронтенд — Server Components по умолчанию.**
+10. **Роутинг: `/` → WordPress, `/dashboard` → Next.js, `/api` → Go.**
+11. **Next.js basePath = "/dashboard".**
+12. **Светлая тема по умолчанию. Минимализм.**
+13. **Extraction — ДЕШЁВАЯ модель, НИЗКИЙ reasoning.** Умная ЛОМАЕТ extraction.
+14. **Gardener — ТОЛЬКО УМНАЯ модель.** Дешёвая плодит ложные связи (+113% redundancy).
+15. **Lineage обязателен.** Concept без evidence_spans → source_id = Graph Sludge.
+16. **Confidence capping.** НЕ МОЖЕТ быть выше чем поддерживается evidence.
+17. **Gardener Phase 0 = Proposals, НЕ мутации.** Авто merge/split без review запрещены.
+18. **Reflective concepts: ≥3 cross-episode evidence.** Один эпизод ≠ паттерн.
+19. **Reflective data изолирована.** Отдельные retention/purge, доступ по флагу.
+20. **Residuals НЕ удаляются.** Они уходят в пул для offline-анализа Gardener'ом.

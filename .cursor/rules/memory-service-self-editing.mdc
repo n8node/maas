@@ -1,0 +1,514 @@
+---
+description: Memory-as-a-Service — Self-editing Memory (агент сам управляет своей памятью)
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Self-editing Memory
+
+## Концепция
+
+Помимо стандартного режима (разработчик вызывает `ingest`/`query` через API),
+платформа поддерживает **self-editing режим**: агент сам управляет своей памятью
+в реальном времени через tool calls во время разговора с пользователем.
+
+Это третий режим работы платформы (дополнение к Standalone и Agent):
+
+| Режим | Кто управляет памятью | Когда использовать |
+|-------|----------------------|-------------------|
+| **Standalone** | Разработчик через API | Простые кейсы, один тип памяти |
+| **Agent (Unified)** | Разработчик через API, платформа объединяет | Сложные агенты, multi-layer |
+| **Self-editing** | Сам AI-агент через tool calls | Персональные ассистенты, адаптивные боты |
+
+Self-editing — НЕ отдельный тип памяти. Это **режим доступа** к существующим типам,
+при котором агент получает tool definitions для записи, чтения, обновления и удаления
+данных в памяти напрямую, в потоке разговора.
+
+---
+
+## Архитектура: три уровня памяти агента
+
+Вдохновлено Letta/MemGPT, адаптировано под нашу архитектуру типов.
+
+### Core Memory (горячая, всегда в контексте)
+
+Маленький блок структурированного текста (до 4K токенов), который агент видит
+при КАЖДОМ вызове. Это «оперативная память» — самое важное о пользователе и контексте.
+
+Хранится в Working Memory инстансе как специальный ключ `__core__`.
+
+```json
+{
+  "session_id": "__persistent__",
+  "key": "__core__",
+  "value": {
+    "user_profile": "Алексей, 34 года, маркетолог в IT-компании",
+    "preferences": "Предпочитает краткие ответы. Аллергия на орехи.",
+    "current_context": "Обсуждаем стратегию контент-маркетинга на Q3",
+    "important_facts": "Бюджет на маркетинг: 2M руб/квартал. KPI: 500 лидов/мес."
+  }
+}
+```
+
+Агент САМИ редактирует core memory через tool calls:
+- `core_memory_read` — прочитать текущее состояние
+- `core_memory_update` — обновить конкретную секцию
+- `core_memory_replace` — заменить значение в секции
+
+Core memory ВСЕГДА инжектируется в system prompt агента при каждом вызове.
+Это задача разработчика (через SDK) или MCP (автоматически).
+
+### Recall Memory (тёплая, поиск по истории)
+
+Полная история взаимодействий с поиском. Маппится на **Episodic Memory** инстанс.
+Агент ищет по ней когда нужно вспомнить что-то из прошлых разговоров.
+
+- `recall_memory_search` — семантический поиск по истории
+- `recall_memory_insert` — сохранить важный момент из текущего разговора
+
+### Archival Memory (холодная, долгосрочное хранилище)
+
+Факты, знания, выводы, которые агент считает важными для долгосрочного хранения.
+Маппится на **Wiki Memory** или **RAG Memory** инстанс.
+
+- `archival_memory_search` — поиск по долгосрочной памяти
+- `archival_memory_insert` — сохранить факт/знание
+- `archival_memory_update` — обновить существующий факт
+- `archival_memory_delete` — удалить устаревший факт
+
+---
+
+## Self-editing Tools (MCP + SDK)
+
+### Полный набор tool definitions
+
+```json
+[
+  {
+    "name": "core_memory_read",
+    "description": "Read the current core memory — your persistent knowledge about the user and current context. Core memory is always available to you, but use this tool when you need to explicitly check a specific section.",
+    "parameters": {
+      "section": "string? — specific section to read (user_profile, preferences, current_context, important_facts). Omit to read all."
+    }
+  },
+  {
+    "name": "core_memory_update",
+    "description": "Update a section of core memory with new information. Use this when you learn something important about the user or context that should persist across conversations. Be selective — core memory is limited to ~4K tokens.",
+    "parameters": {
+      "section": "string — which section to update (user_profile, preferences, current_context, important_facts)",
+      "content": "string — new content for this section (replaces existing)",
+      "reason": "string — why you're updating this (logged for audit)"
+    }
+  },
+  {
+    "name": "core_memory_replace",
+    "description": "Find and replace a specific piece of text in core memory. Use for small corrections (e.g., updating a name, changing a preference).",
+    "parameters": {
+      "old_text": "string — text to find in core memory",
+      "new_text": "string — replacement text",
+      "reason": "string — why you're making this change"
+    }
+  },
+  {
+    "name": "recall_memory_search",
+    "description": "Search through past conversation history for relevant information. Use when the user refers to something discussed previously, or when you need context from earlier sessions.",
+    "parameters": {
+      "query": "string — what to search for",
+      "top_k": "number? — max results (default 5)",
+      "time_range": "string? — 'last_24h', 'last_week', 'last_month', 'all'"
+    }
+  },
+  {
+    "name": "recall_memory_insert",
+    "description": "Save an important moment from the current conversation to recall memory. Use for key decisions, preferences expressed, or important facts that may be useful in future sessions.",
+    "parameters": {
+      "content": "string — what to remember",
+      "importance": "number? — 0.0 to 1.0, how important this is (default 0.5)",
+      "metadata": "object? — additional context"
+    }
+  },
+  {
+    "name": "archival_memory_search",
+    "description": "Search your long-term knowledge base for facts, concepts, and accumulated knowledge. Use when you need established facts rather than conversation history.",
+    "parameters": {
+      "query": "string — what to search for",
+      "top_k": "number? — max results (default 5)"
+    }
+  },
+  {
+    "name": "archival_memory_insert",
+    "description": "Store a fact or piece of knowledge in long-term memory. Use for verified facts, learned concepts, user-specific knowledge that should persist indefinitely. Each insert creates a concept hypothesis that can be refined over time.",
+    "parameters": {
+      "content": "string — fact or knowledge to store",
+      "concept_type": "string? — type: fact, belief, goal, entity, event (default: fact)",
+      "metadata": "object? — additional context"
+    }
+  },
+  {
+    "name": "archival_memory_update",
+    "description": "Update an existing fact in long-term memory. Use when you learn that stored information has changed or was incorrect.",
+    "parameters": {
+      "memory_id": "string — ID of the memory to update (from search results)",
+      "new_content": "string — updated content",
+      "reason": "string — why this is being updated"
+    }
+  },
+  {
+    "name": "archival_memory_delete",
+    "description": "Remove a fact from long-term memory. Use when information is confirmed to be wrong or no longer relevant.",
+    "parameters": {
+      "memory_id": "string — ID of the memory to delete",
+      "reason": "string — why this is being deleted"
+    }
+  }
+]
+```
+
+### Маппинг tools → платформа
+
+| Self-editing tool | Тип памяти | Операция |
+|------------------|-----------|----------|
+| `core_memory_read` | Working | GET session `__persistent__`, key `__core__` |
+| `core_memory_update` | Working | PUT session `__persistent__`, key `__core__` (merge section) |
+| `core_memory_replace` | Working | PUT session `__persistent__`, key `__core__` (string replace) |
+| `recall_memory_search` | Episodic | POST query |
+| `recall_memory_insert` | Episodic | POST ingest |
+| `archival_memory_search` | Wiki или RAG | POST query |
+| `archival_memory_insert` | Wiki или RAG | POST ingest (async, concept extraction) |
+| `archival_memory_update` | Wiki | PATCH concept |
+| `archival_memory_delete` | Wiki или RAG | DELETE data |
+
+### Реализация в Agent
+
+Self-editing активируется на уровне Agent:
+
+```json
+{
+  "name": "Personal Assistant",
+  "config": {
+    "self_editing": true,
+    "core_memory_sections": ["user_profile", "preferences", "current_context", "important_facts"],
+    "core_memory_max_tokens": 4000
+  },
+  "layers": [
+    { "memory_type": "working", "role": "core_memory", "priority": 1 },
+    { "memory_type": "episodic", "role": "recall_memory", "priority": 2 },
+    { "memory_type": "wiki", "role": "archival_memory", "priority": 3 }
+  ]
+}
+```
+
+Когда `self_editing: true`:
+- MCP endpoint отдаёт расширенный набор tools (core/recall/archival)
+- SDK предоставляет helper для формирования system prompt с core memory injection
+- Все self-edit операции логируются в action_log с `actor: "self_edit"`
+
+---
+
+## Core Memory Injection
+
+При каждом вызове агента core memory должна быть в system prompt.
+SDK предоставляет helper:
+
+```python
+from memoryservice import MemoryClient
+
+client = MemoryClient(api_key="ms_live_xxx")
+agent = client.agents.get("agent_abc")
+
+# Получить core memory для инъекции в system prompt
+core = agent.get_core_memory(user_id="user_123")
+
+system_prompt = f"""You are a personal assistant.
+
+<core_memory>
+{core.to_xml()}
+</core_memory>
+
+You have access to memory tools. Use them to:
+- Update core memory when you learn important things about the user
+- Search recall memory for past conversation context
+- Store important facts in archival memory
+- Keep core memory concise and current — remove outdated info
+"""
+
+# Core memory в XML формате:
+# <core_memory>
+#   <user_profile>Алексей, 34 года, маркетолог</user_profile>
+#   <preferences>Краткие ответы. Аллергия на орехи.</preferences>
+#   <current_context>Обсуждаем контент-стратегию Q3</current_context>
+#   <important_facts>Бюджет 2M руб. KPI 500 лидов.</important_facts>
+# </core_memory>
+```
+
+---
+
+## Модель данных (дополнения)
+
+```sql
+-- migrations/013_self_editing.up.sql
+
+-- Добавить self_editing конфигурацию в agents
+ALTER TABLE agents ADD COLUMN self_editing_enabled BOOLEAN DEFAULT false;
+ALTER TABLE agents ADD COLUMN core_memory_config JSONB DEFAULT '{
+    "sections": ["user_profile", "preferences", "current_context", "important_facts"],
+    "max_tokens": 4000
+}';
+
+-- Лог self-edit операций (использует существующий action_log)
+-- actor = 'self_edit'
+-- action = 'core_update', 'core_replace', 'recall_insert', 'archival_insert', 'archival_update', 'archival_delete'
+-- rationale = reason из tool call (агент объясняет почему он это делает)
+
+-- Core memory хранится в working_memory:
+-- session_id = '__persistent__' (не истекает)
+-- key = '__core__'
+-- value = JSONB с секциями
+
+-- Статистика self-edit операций
+CREATE TABLE self_edit_stats (
+    id BIGSERIAL PRIMARY KEY,
+    agent_id UUID REFERENCES agents(id) ON DELETE CASCADE,
+    scope_user_id TEXT,
+    period_start TIMESTAMPTZ NOT NULL,
+    period_end TIMESTAMPTZ NOT NULL,
+    core_reads INT DEFAULT 0,
+    core_updates INT DEFAULT 0,
+    core_replaces INT DEFAULT 0,
+    recall_searches INT DEFAULT 0,
+    recall_inserts INT DEFAULT 0,
+    archival_searches INT DEFAULT 0,
+    archival_inserts INT DEFAULT 0,
+    archival_updates INT DEFAULT 0,
+    archival_deletes INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+```
+
+---
+
+## Защита от деградации
+
+Главный риск self-editing: агент может записать мусор, забить core memory нерелевантным,
+или удалить важные факты. Защитные механизмы:
+
+### 1. Core Memory Size Limit
+
+Core memory ограничена `max_tokens` (по умолчанию 4000).
+При попытке `core_memory_update` которая превышает лимит:
+- Tool возвращает ошибку: `"Core memory would exceed limit (4000 tokens). Current: 3800, update would add: 500. Please remove outdated information first."`
+- Это вынуждает агента сам чистить свою core memory
+
+### 2. Rate Limiting на self-edit операции
+
+- Максимум 20 self-edit операций за один conversation turn
+- Максимум 100 self-edit операций в час на agent/user_id
+- При превышении: tool возвращает `"Rate limit exceeded. Please reduce memory operations."`
+
+### 3. Audit Trail
+
+ВСЕ self-edit операции логируются в action_log:
+```json
+{
+  "actor": "self_edit",
+  "action": "core_update",
+  "agent_id": "agent_abc",
+  "scope_user_id": "user_123",
+  "target": "core_memory.preferences",
+  "old_value": "Предпочитает краткие ответы",
+  "new_value": "Предпочитает краткие ответы. Любит примеры с кодом.",
+  "rationale": "User explicitly asked for more code examples in responses",
+  "timestamp": "2026-04-11T15:30:00Z"
+}
+```
+
+### 4. Rollback
+
+Разработчик может откатить core memory к предыдущей версии:
+```
+POST /api/v1/agents/:id/core-memory/rollback
+{
+  "user_id": "user_123",
+  "to_timestamp": "2026-04-10T00:00:00Z"
+}
+```
+
+Core memory хранит историю изменений (используя working_memory с версионированными ключами):
+- `__core__` — текущая версия
+- `__core__:2026-04-11T15:30:00Z` — снапшот перед каждым обновлением
+- Снапшоты хранятся 30 дней
+
+### 5. Gardener Review для archival_insert
+
+Когда агент вызывает `archival_memory_insert`:
+- Факт НЕ сразу становится полноценным concept hypothesis
+- Он создаётся со `state: "weak"` и `confidence: 0.3`
+- Gardener при следующем triage проверяет self-edit insertions:
+  - Подтверждает → `state: "active"`, confidence повышается
+  - Отвергает → `state: "archived"`
+- Это предотвращает загрязнение Wiki/Graph памяти низкокачественными записями агента
+
+### 6. Contradiction Detection
+
+При `core_memory_update` и `archival_memory_insert` система проверяет:
+- Новый факт vs существующие концепты → если найдено противоречие,
+  tool возвращает предупреждение:
+  `"Warning: this contradicts existing knowledge: [Concept:xyz] states '...'. Proceed? (insert anyway / skip / update existing)"`
+- Агент сам решает как поступить, но факт логируется как `disputed`
+
+---
+
+## MCP Tools (обновление)
+
+Когда Agent имеет `self_editing: true`, MCP endpoint отдаёт расширенный набор tools:
+
+**Стандартные** (для всех Agent'ов):
+- `memory_query`
+- `memory_ingest`
+- `memory_list_instances`
+- `memory_get_concepts`
+- `memory_health`
+
+**Self-editing** (только при `self_editing: true`):
+- `core_memory_read`
+- `core_memory_update`
+- `core_memory_replace`
+- `recall_memory_search`
+- `recall_memory_insert`
+- `archival_memory_search`
+- `archival_memory_insert`
+- `archival_memory_update`
+- `archival_memory_delete`
+
+---
+
+## SDK поддержка
+
+```python
+# Python SDK — self-editing helpers
+
+agent = client.agents.get("agent_abc")
+
+# Получить tools для передачи в LLM
+tools = agent.get_self_editing_tools()
+# Возвращает list[dict] в формате OpenAI function calling
+
+# Обработать tool call от LLM
+result = agent.execute_tool_call(
+    tool_name="core_memory_update",
+    arguments={
+        "section": "preferences",
+        "content": "Предпочитает краткие ответы. Любит примеры с кодом.",
+        "reason": "User asked for code examples"
+    },
+    user_id="user_123"
+)
+
+# Полный conversation loop с self-editing
+from memoryservice import SelfEditingLoop
+
+loop = SelfEditingLoop(agent=agent, user_id="user_123")
+
+# System prompt автоматически содержит core memory
+response = loop.chat(
+    user_message="Кстати, я теперь работаю в Яндексе",
+    model="anthropic/claude-sonnet-4",  # Через OpenRouter
+)
+# Агент автоматически:
+# 1. Обновит core_memory.user_profile: "...маркетолог в Яндексе"
+# 2. Сохранит в recall: "Пользователь сменил работу на Яндекс"
+# 3. Ответит пользователю
+
+# Посмотреть что агент изменил в памяти за этот turn
+print(loop.last_memory_ops)
+# [
+#   {"tool": "core_memory_update", "section": "user_profile", "reason": "User mentioned new job"},
+#   {"tool": "recall_memory_insert", "content": "Changed job to Yandex", "importance": 0.8}
+# ]
+```
+
+```typescript
+// TypeScript SDK
+
+const agent = await client.agents.get('agent_abc');
+const tools = agent.getSelfEditingTools(); // For OpenAI/Anthropic function calling format
+
+const result = await agent.executeToolCall('core_memory_update', {
+  section: 'preferences',
+  content: 'Prefers brief answers with code examples',
+  reason: 'User requested more code examples',
+}, { userId: 'user_123' });
+```
+
+---
+
+## Фронтенд
+
+### Страница Agent → Core Memory (`/dashboard/agents/:id/core-memory`)
+
+- Текущее состояние core memory для каждого user_id (таблица user_id → preview)
+- При клике на user_id: полное содержимое core memory, разбитое по секциям
+- История изменений (timeline): кто (self_edit), что изменил, когда, зачем (rationale)
+- Кнопка "Rollback" — откатить к предыдущей версии
+- Статистика: количество self-edit операций за период
+
+### Страница Agent → Settings: секция Self-editing
+
+- Toggle: включить/выключить self-editing
+- Настройка секций core memory (добавить/удалить/переименовать)
+- Max tokens для core memory (slider)
+- Rate limits для self-edit операций
+
+### Admin: мониторинг
+
+В `/admin/agents/:id`:
+- Self-edit операций за 24ч / 7д / 30д
+- Топ user_id по количеству операций
+- Процент archival inserts отвергнутых Gardener'ом (показатель качества агента)
+
+---
+
+## Биллинг
+
+Self-editing операции тарифицируются:
+- `core_memory_read/update/replace` — бесплатно (это просто key-value CRUD, без LLM)
+- `recall_memory_search` — как обычный episodic query (embedding + LLM)
+- `recall_memory_insert` — как обычный episodic ingest (embedding, дёшево)
+- `archival_memory_search` — как обычный wiki/rag query
+- `archival_memory_insert` — как wiki ingest (extraction + routing, дорого)
+- `archival_memory_update/delete` — бесплатно (CRUD без LLM)
+
+В тарифном плане:
+```sql
+ALTER TABLE plans ADD COLUMN self_editing_enabled BOOLEAN DEFAULT false;
+-- Free: false, Starter: false, Pro: true, Business: true
+```
+
+---
+
+## Порядок разработки
+
+Self-editing добавляется в **Фазу 8.5** (вместе с SDK и MCP):
+
+1. Core memory: хранение в Working Memory (`__persistent__/__core__`)
+2. Core memory tools: read/update/replace через MCP и API
+3. Recall tools: маппинг на Episodic ingest/query
+4. Archival tools: маппинг на Wiki/RAG ingest/query/update/delete
+5. Audit trail: action_log с `actor: "self_edit"`
+6. Rollback: снапшоты, endpoint rollback
+7. Protection: rate limits, size limits, contradiction detection
+8. Gardener integration: weak state для archival inserts
+9. SDK helpers: `get_self_editing_tools()`, `execute_tool_call()`, `SelfEditingLoop`
+10. Фронтенд: core memory viewer, history, rollback, settings
+
+---
+
+## Критические правила
+
+34. **Self-editing = режим доступа, НЕ тип памяти.** Работает поверх Working + Episodic + Wiki/RAG.
+35. **Core memory ≤ max_tokens.** При превышении — ошибка, агент должен сам почистить.
+36. **Все self-edit операции логируются в action_log** с actor="self_edit" и rationale.
+37. **archival_memory_insert создаёт concept с state="weak", confidence=0.3.** Gardener подтверждает или отвергает.
+38. **Rate limit: 20 операций/turn, 100 операций/час на agent+user_id.**
+39. **Core memory снапшоты хранятся 30 дней** для rollback.
+40. **Contradiction detection при insert/update.** Предупреждение агенту, логирование как disputed.

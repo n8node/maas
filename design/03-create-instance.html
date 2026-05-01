@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MemoryService — New Instance</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f8f8f7;--bg3:#f3f2ef;
+  --text:#1a1a1a;--text2:#5f5e5a;--text3:#888780;
+  --border:#e8e7e3;--border2:#d3d1c7;
+  --radius:8px;--radius-lg:12px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+}
+body{font-family:var(--font);font-size:13px;background:var(--bg3);color:var(--text)}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:220px;flex-shrink:0;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh}
+.logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.logo-icon{width:28px;height:28px;background:#1a1a1a;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-name{font-size:14px;font-weight:500}
+.nav{flex:1;padding:12px 8px}
+.nav-label{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:10px 12px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:var(--radius);font-size:13px;color:var(--text2);cursor:pointer;text-decoration:none}
+.nav-item:hover{background:var(--bg2);color:var(--text)}
+.nav-item.active{background:var(--bg2);color:var(--text);font-weight:500}
+.nav-badge{margin-left:auto;font-size:10px;background:#e6f1fb;color:#185fa5;padding:2px 6px;border-radius:10px;font-weight:500}
+.sidebar-footer{padding:12px 16px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.avatar{width:28px;height:28px;border-radius:50%;background:#e6f1fb;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#185fa5}
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column;background:var(--bg3)}
+.topbar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 24px;height:46px;display:flex;align-items:center}
+.breadcrumb{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:6px}
+.bc-sep{color:var(--border2)}.bc-cur{color:var(--text);font-weight:500}
+.wiz-wrap{flex:1;display:flex}
+.steps-panel{width:200px;flex-shrink:0;background:var(--bg);border-right:1px solid var(--border);padding:24px 16px}
+.steps-title{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px}
+.step-item{display:flex;align-items:flex-start;gap:10px;padding:8px 0;position:relative}
+.step-item:not(:last-child)::after{content:'';position:absolute;left:10px;top:28px;bottom:-8px;width:1px;background:var(--border)}
+.step-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;flex-shrink:0;border:1px solid var(--border);background:var(--bg);color:var(--text3)}
+.step-num.done{background:#1a1a1a;border-color:#1a1a1a;color:#fff}
+.step-num.active{border-color:#1a1a1a;color:#1a1a1a}
+.step-label{font-size:12px;color:var(--text3);padding-top:3px;line-height:1.3}
+.step-label.active{color:var(--text);font-weight:500}
+.step-label.done{color:var(--text2)}
+.wiz-content{flex:1;overflow-y:auto;padding:28px}
+.wiz-title{font-size:16px;font-weight:500;margin-bottom:4px}
+.wiz-desc{font-size:13px;color:var(--text2);margin-bottom:24px}
+.wiz-footer{background:var(--bg);border-top:1px solid var(--border);padding:14px 28px;display:flex;align-items:center;justify-content:space-between}
+.footer-hint{font-size:12px;color:var(--text3)}
+.footer-actions{display:flex;gap:8px}
+.btn-back{background:transparent;border:1px solid var(--border2);border-radius:var(--radius);padding:7px 16px;font-size:13px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+.btn-next{background:#1a1a1a;color:#fff;border:none;border-radius:var(--radius);padding:7px 18px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font)}
+
+/* Type grid */
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:28px}
+.type-card{border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px;cursor:pointer;background:var(--bg);position:relative;transition:border-color .12s}
+.type-card:hover{border-color:var(--border2)}
+.type-card.selected{border:2px solid #1a1a1a}
+.tc-icon{width:32px;height:32px;border-radius:7px;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.tc-name{font-size:13px;font-weight:500;margin-bottom:4px}
+.tc-desc{font-size:11px;color:var(--text3);line-height:1.4}
+.tc-badge{position:absolute;top:10px;right:10px;font-size:9px;background:#eeedfe;color:#534ab7;padding:2px 6px;border-radius:3px;font-weight:500}
+.tc-check{display:none;position:absolute;top:10px;right:10px;width:16px;height:16px;background:#1a1a1a;border-radius:50%;align-items:center;justify-content:center}
+.type-card.selected .tc-check{display:flex}
+
+/* Settings */
+.cfg-section{margin-bottom:24px}
+.cfg-title{font-size:12px;font-weight:500;color:var(--text2);margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);text-transform:uppercase;letter-spacing:.05em}
+.form-row{margin-bottom:14px}
+.form-label{font-size:12px;color:var(--text2);margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.form-hint{font-size:11px;color:var(--text3)}
+.form-hint.warn{color:#ba7517}
+.form-input{width:100%;height:34px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 10px;font-size:13px;background:var(--bg);color:var(--text);font-family:var(--font)}
+.form-input:focus{outline:none;border-color:#888}
+.form-select{width:100%;height:34px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 10px;font-size:13px;background:var(--bg);color:var(--text);font-family:var(--font);cursor:pointer}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.toggle-row{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--border)}
+.toggle-row:last-child{border-bottom:none}
+.toggle-label{font-size:13px}
+.toggle-desc{font-size:11px;color:var(--text3);margin-top:1px}
+.tgl{width:32px;height:18px;border-radius:9px;position:relative;cursor:pointer;flex-shrink:0}
+.tgl.on{background:#1a1a1a}.tgl.off{background:var(--border2)}
+.tgl::after{content:'';position:absolute;width:12px;height:12px;background:#fff;border-radius:50%;top:3px;transition:left .15s}
+.tgl.on::after{left:17px}.tgl.off::after{left:3px}
+.slider-row{display:flex;align-items:center;gap:10px}
+.slider-row input[type=range]{flex:1}
+.slider-val{font-size:12px;font-weight:500;min-width:36px;text-align:right}
+
+/* Ingest step */
+.dz-box{border:2px dashed var(--border2);border-radius:var(--radius-lg);padding:16px;margin-bottom:12px;cursor:pointer;transition:border-color .12s,background .12s}
+.dz-box:hover{border-color:#888;background:var(--bg2)}
+.fmt-group{margin-bottom:10px}
+.fg-label{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.06em;margin-bottom:5px;display:flex;align-items:center;gap:6px}
+.fg-chips{display:flex;flex-wrap:wrap;gap:4px}
+.fc{font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px}
+.fc-doc{background:#e6f1fb;color:#185fa5}
+.fc-audio{background:#eaf3de;color:#3b6d11}
+.fc-video{background:#eeedfe;color:#534ab7}
+.fc-img{background:#faeeda;color:#854f0b}
+.wiz-file-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:5px}
+.wfi-icon{font-size:14px;flex-shrink:0}
+.wfi-name{flex:1;font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.wfi-conv{font-size:10px;color:var(--text3)}
+.wfi-cost{font-size:10px;font-weight:500}
+.cost-free{color:#3b6d11}.cost-paid{color:#854f0b}
+.wfi-remove{background:none;border:none;cursor:pointer;color:var(--text3);font-size:16px;padding:0;line-height:1;font-family:var(--font)}
+
+/* Summary */
+.sum-block{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:16px 18px;margin-bottom:14px}
+.sum-row{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-size:12px}
+.sum-row:last-child{border-bottom:none}
+.sum-key{color:var(--text3)}.sum-val{font-weight:500}
+.cost-card{background:var(--bg2);border-radius:var(--radius);padding:12px 14px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.info-note{background:#e6f1fb;border-radius:var(--radius);padding:10px 14px;font-size:12px;color:#185fa5;line-height:1.5}
+</style>
+</head>
+<body>
+<div class="layout">
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="8" r="2" fill="white" opacity=".9"/><circle cx="12" cy="4" r="1.5" fill="white" opacity=".6"/><circle cx="12" cy="12" r="1.5" fill="white" opacity=".6"/><line x1="6" y1="8" x2="10.5" y2="4.5" stroke="white" stroke-width=".8" opacity=".5"/><line x1="6" y1="8" x2="10.5" y2="11.5" stroke="white" stroke-width=".8" opacity=".5"/></svg></div>
+    <span class="logo-name">MemoryService</span>
+  </div>
+  <div class="nav">
+    <a class="nav-item" href="01-dashboard.html">Overview</a>
+    <a class="nav-item active" href="#">Instances <span class="nav-badge">7</span></a>
+    <a class="nav-item" href="02-agents.html">Agents</a>
+    <div class="nav-label">Developer</div>
+    <a class="nav-item" href="#">API Keys</a>
+    <a class="nav-item" href="#">Docs</a>
+    <div class="nav-label">Account</div>
+    <a class="nav-item" href="#">Billing</a>
+    <a class="nav-item" href="#">Settings</a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="avatar">AK</div>
+    <div><div style="font-size:12px;font-weight:500">Alexey K.</div><div style="font-size:11px;color:var(--text3)">Pro plan</div></div>
+  </div>
+</div>
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb">
+      <span>Instances</span><span class="bc-sep">›</span><span class="bc-cur">New instance</span>
+    </div>
+  </div>
+  <div class="wiz-wrap">
+    <div class="steps-panel">
+      <div class="steps-title">Setup steps</div>
+      <div class="step-item"><div class="step-num done" id="sn1"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg></div><div class="step-label done" id="sl1">Memory type</div></div>
+      <div class="step-item"><div class="step-num active" id="sn2">2</div><div class="step-label active" id="sl2">Configuration</div></div>
+      <div class="step-item"><div class="step-num" id="sn3">3</div><div class="step-label" id="sl3">Ingest &amp; sources</div></div>
+      <div class="step-item"><div class="step-num" id="sn4">4</div><div class="step-label" id="sl4">Confirm &amp; create</div></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column">
+      <div class="wiz-content" id="wiz-body"></div>
+      <div class="wiz-footer">
+        <span class="footer-hint" id="footer-hint">Step 2 of 4</span>
+        <div class="footer-actions">
+          <button class="btn-back" id="btn-back" onclick="go(step-1)">Back</button>
+          <button class="btn-next" id="btn-next" onclick="go(step+1)">Continue</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+let step=2, selectedType='wiki', wizFiles=[];
+const types=[
+  {id:'wiki',name:'Wiki',bg:'#eeedfe',col:'#534ab7',desc:'Concept hypotheses with full lineage',badge:'Popular'},
+  {id:'rag',name:'RAG',bg:'#e6f1fb',col:'#185fa5',desc:'Vector search over documents'},
+  {id:'episodic',name:'Episodic',bg:'#eaf3de',col:'#3b6d11',desc:'Chronological memory with decay'},
+  {id:'working',name:'Working',bg:'#faeeda',col:'#854f0b',desc:'Session key-value with TTL'},
+  {id:'graph',name:'Graph',bg:'#faece7',col:'#993c1d',desc:'Entities and typed relations'},
+  {id:'reflective',name:'Reflective',bg:'#fbeaf0',col:'#993556',desc:'Behavioral patterns and emotions'},
+];
+const fmtData={
+  pdf:{icon:'📄',conv:'Docling',cost:'free'},docx:{icon:'📝',conv:'Docling',cost:'free'},
+  md:{icon:'📋',conv:'Direct',cost:'free'},txt:{icon:'📋',conv:'Direct',cost:'free'},
+  xlsx:{icon:'📊',conv:'Docling',cost:'free'},pptx:{icon:'📑',conv:'Docling',cost:'free'},
+  mp3:{icon:'🎵',conv:'Whisper',cost:'~$0.006/min'},wav:{icon:'🎵',conv:'Whisper',cost:'~$0.006/min'},
+  m4a:{icon:'🎵',conv:'Whisper',cost:'~$0.006/min'},
+  mp4:{icon:'🎬',conv:'ffmpeg+Whisper',cost:'~$0.006/min'},mov:{icon:'🎬',conv:'ffmpeg+Whisper',cost:'~$0.006/min'},
+  jpg:{icon:'🖼️',conv:'Vision OCR',cost:'~$0.002/img'},png:{icon:'🖼️',conv:'Vision OCR',cost:'~$0.002/img'},
+  webp:{icon:'🖼️',conv:'Vision OCR',cost:'~$0.002/img'},
+};
+const sampleFiles=[
+  {name:'product-docs.pdf',ext:'pdf'},{name:'team-interview.mp3',ext:'mp3'},{name:'architecture.png',ext:'png'},
+];
+let sfi=0;
+
+function go(n){
+  step=Math.max(1,Math.min(4,n));
+  [1,2,3,4].forEach(i=>{
+    const num=document.getElementById('sn'+i), lbl=document.getElementById('sl'+i);
+    if(i<step){num.className='step-num done';num.innerHTML='<svg width="8" height="8" viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg>';lbl.className='step-label done';}
+    else if(i===step){num.className='step-num active';num.textContent=i;lbl.className='step-label active';}
+    else{num.className='step-num';num.textContent=i;lbl.className='step-label';}
+  });
+  document.getElementById('footer-hint').textContent=`Step ${step} of 4 — ${['Memory type','Configuration','Ingest & sources','Confirm & create'][step-1]}`;
+  document.getElementById('btn-next').textContent=step===4?'Create instance':'Continue';
+  document.getElementById('btn-back').style.display=step===1?'none':'';
+  document.getElementById('wiz-body').innerHTML=[r1,r2,r3,r4][step-1]();
+}
+
+function r1(){
+  return `<div class="wiz-title">Choose memory type</div>
+  <div class="wiz-desc">Select the type of memory that fits your use case.</div>
+  <div class="type-grid">${types.map(t=>`
+  <div class="type-card${t.id===selectedType?' selected':''}" onclick="selectedType='${t.id}';document.querySelectorAll('.type-card').forEach(c=>c.classList.remove('selected'));this.classList.add('selected')">
+    <div class="tc-icon" style="background:${t.bg}"><div style="width:14px;height:14px;border-radius:50%;background:${t.col}"></div></div>
+    <div class="tc-name">${t.name}</div>
+    <div class="tc-desc">${t.desc}</div>
+    ${t.badge?`<div class="tc-badge">${t.badge}</div>`:''}
+    <div class="tc-check"><svg width="8" height="8" viewBox="0 0 8 8" fill="none"><polyline points="1,4 3,6 7,2" stroke="white" stroke-width="1.2" stroke-linecap="round"/></svg></div>
+  </div>`).join('')}</div>`;}
+
+function r2(){
+  const specifics={
+    wiki:`<div class="cfg-section"><div class="cfg-title">Concept types</div><div style="display:flex;flex-wrap:wrap;gap:6px">${['fact','entity','event','goal','belief','tension','project','pattern'].map((c,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" ${i<5?'checked':''} style="width:12px;height:12px"/>${c}</label>`).join('')}</div></div><div class="cfg-section"><div class="cfg-title">Gardener</div><div class="toggle-row"><div><div class="toggle-label">Auto-gardener</div><div class="toggle-desc">Automatic triage and proposals</div></div><div class="tgl on"></div></div><div class="form-row" style="margin-top:10px"><div class="form-label">Gardener schedule</div><select class="form-select"><option>Every 24 hours</option><option>Every 12 hours</option><option>Manual only</option></select></div></div>`,
+    rag:`<div class="cfg-section"><div class="cfg-title">Chunking</div><div class="two-col"><div class="form-row" style="margin-bottom:0"><div class="form-label">Chunk size <span class="form-hint">tokens</span></div><div class="slider-row"><input type="range" min="256" max="2048" value="512" step="64" oninput="this.nextElementSibling.textContent=this.value"/><span class="slider-val">512</span></div></div><div class="form-row" style="margin-bottom:0"><div class="form-label">Overlap <span class="form-hint">tokens</span></div><div class="slider-row"><input type="range" min="0" max="256" value="64" step="16" oninput="this.nextElementSibling.textContent=this.value"/><span class="slider-val">64</span></div></div></div></div><div class="cfg-section"><div class="cfg-title">Features</div><div class="toggle-row"><div><div class="toggle-label">Hierarchical clustering</div><div class="toggle-desc">Group chunks into topic clusters</div></div><div class="tgl on"></div></div></div>`,
+    episodic:`<div class="cfg-section"><div class="cfg-title">Decay</div><div class="form-row"><div class="form-label">Decay rate <span class="form-hint">per day</span></div><div class="slider-row"><input type="range" min="1" max="20" value="5" step="1" oninput="document.getElementById('dr').textContent=(this.value/100).toFixed(2)"/><span class="slider-val" id="dr">0.05</span></div></div></div><div class="cfg-section"><div class="cfg-title">Features</div><div class="toggle-row"><div><div class="toggle-label">Bi-temporal facts</div><div class="toggle-desc">Track valid_time and system_time separately</div></div><div class="tgl on"></div></div></div>`,
+    working:`<div class="cfg-section"><div class="cfg-title">TTL</div><div class="form-row"><div class="form-label">Default TTL</div><select class="form-select"><option>15 minutes</option><option>30 minutes</option><option>1 hour</option><option>4 hours</option><option>No expiry</option></select></div></div>`,
+    graph:`<div class="cfg-section"><div class="cfg-title">Relation types</div><div style="display:flex;flex-wrap:wrap;gap:6px">${['causes','conflicts_with','supports','instance_of','enables','depends_on','evolved_into','part_of'].map((r,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" ${i<6?'checked':''} style="width:12px;height:12px"/>${r}</label>`).join('')}</div></div>`,
+    reflective:`<div class="cfg-section"><div class="cfg-title">Reaction states</div><div style="display:flex;flex-wrap:wrap;gap:6px">${['frustration','anxiety','clarity','inspiration','joy','confusion','determination','overwhelmed'].map((r,i)=>`<label style="display:flex;align-items:center;gap:4px;font-size:12px;color:var(--text2);cursor:pointer"><input type="checkbox" ${i<5?'checked':''} style="width:12px;height:12px"/>${r}</label>`).join('')}</div></div><div class="cfg-section"><div class="cfg-title">Pattern detection</div><div class="form-row"><div class="form-label">Min episodes for pattern</div><div class="slider-row"><input type="range" min="2" max="10" value="3" step="1" oninput="document.getElementById('me').textContent=this.value"/><span class="slider-val" id="me">3</span></div></div></div>`,
+  };
+  const t=types.find(x=>x.id===selectedType);
+  return `<div class="wiz-title">Configure ${t.name} memory</div>
+  <div class="wiz-desc">Customize the instance settings. You can change these later.</div>
+  <div class="cfg-section"><div class="cfg-title">Basic</div>
+    <div class="form-row"><div class="form-label">Instance name</div><input class="form-input" value="Product Knowledge Base"/></div>
+    <div class="two-col">
+      <div class="form-row" style="margin-bottom:0"><div class="form-label">Extraction model <span class="form-hint warn">cheap · low reasoning</span></div><select class="form-select"><option>Gemini 2.5 Flash</option><option>Claude Haiku 4.5</option></select></div>
+      <div class="form-row" style="margin-bottom:0"><div class="form-label">Embedding model</div><select class="form-select"><option>text-embedding-3-large</option><option>text-embedding-3-small</option></select></div>
+    </div>
+  </div>
+  ${specifics[selectedType]||''}
+  <div class="cfg-section"><div class="cfg-title">Scoping</div>
+    <div class="toggle-row"><div><div class="toggle-label">Enable user_id scoping</div><div class="toggle-desc">Isolate data per end-user</div></div><div class="tgl on"></div></div>
+    <div class="toggle-row"><div><div class="toggle-label">Enable session_id scoping</div><div class="toggle-desc">Further isolate per session</div></div><div class="tgl off"></div></div>
+  </div>`;}
+
+function r3(){
+  return `<div class="wiz-title">Ingest &amp; sources</div>
+  <div class="wiz-desc">Optionally add your first data sources. You can always add more from the Playground.</div>
+  <div class="cfg-section">
+    <div class="cfg-title">Upload files (optional)</div>
+    <div class="dz-box" onclick="addWizFile()">
+      <div style="font-size:12px;font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:6px">
+        <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M6.5 2v8M3.5 7l3-3 3 3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M1.5 11.5h10" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+        Drop files or click to browse
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <div><div class="fg-label" style="margin-bottom:4px">Documents <span class="fc fc-doc">Docling · free</span></div><div class="fg-chips">${['PDF','DOCX','XLSX','PPTX','MD','TXT','HTML'].map(f=>`<span class="fc fc-doc">${f}</span>`).join('')}</div></div>
+        <div><div class="fg-label" style="margin-bottom:4px">Audio <span class="fc fc-audio">Whisper · ~$0.006/min</span></div><div class="fg-chips">${['MP3','WAV','M4A','OGG'].map(f=>`<span class="fc fc-audio">${f}</span>`).join('')}</div></div>
+        <div><div class="fg-label" style="margin-bottom:4px">Video <span class="fc fc-video">ffmpeg+Whisper</span></div><div class="fg-chips">${['MP4','MOV','WEBM','MKV'].map(f=>`<span class="fc fc-video">${f}</span>`).join('')}</div></div>
+        <div><div class="fg-label" style="margin-bottom:4px">Images &amp; scanned PDF <span class="fc fc-img">Vision OCR · ~$0.002/img</span></div><div class="fg-chips">${['JPG','PNG','WEBP','TIFF'].map(f=>`<span class="fc fc-img">${f}</span>`).join('')}</div></div>
+      </div>
+    </div>
+    <div id="wiz-files">${renderWizFiles()}</div>
+    <button onclick="addWizFile()" style="margin-top:4px;font-size:12px;padding:5px 12px;border:1px solid var(--border2);border-radius:var(--radius);background:transparent;cursor:pointer;font-family:var(--font);color:var(--text2)">+ Add file</button>
+  </div>
+  <div class="cfg-section" style="margin-bottom:0">
+    <div class="cfg-title">Quick text ingest (optional)</div>
+    <textarea style="width:100%;height:80px;border:1px solid var(--border2);border-radius:var(--radius);padding:9px;font-size:12px;resize:none;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.5" placeholder="Paste initial text or markdown to seed the memory…"></textarea>
+  </div>`;}
+
+function addWizFile(){
+  const f=sampleFiles[sfi%sampleFiles.length]; sfi++;
+  const fmt=fmtData[f.ext]||{icon:'📄',conv:'Docling',cost:'free'};
+  wizFiles.push({...f,...fmt});
+  document.getElementById('wiz-files').innerHTML=renderWizFiles();
+}
+function removeWizFile(i){wizFiles.splice(i,1);if(document.getElementById('wiz-files'))document.getElementById('wiz-files').innerHTML=renderWizFiles();}
+function renderWizFiles(){
+  return wizFiles.map((f,i)=>`<div class="wiz-file-item">
+    <span class="wfi-icon">${f.icon}</span>
+    <div style="flex:1;min-width:0"><div class="wfi-name">${f.name}</div><div class="wfi-conv">${f.conv}</div></div>
+    <span class="wfi-cost ${f.cost==='free'?'cost-free':'cost-paid'}">${f.cost}</span>
+    <button class="wfi-remove" onclick="removeWizFile(${i});go(3)">×</button>
+  </div>`).join('');}
+
+function r4(){
+  const t=types.find(x=>x.id===selectedType);
+  return `<div class="wiz-title">Confirm and create</div>
+  <div class="wiz-desc">Review your configuration before creating the instance.</div>
+  <div class="sum-block">
+    ${[['Memory type',t.name],['Name','Product Knowledge Base'],['Extraction model','Gemini 2.5 Flash'],['Embedding model','text-embedding-3-large'],['User_id scoping','Enabled'],['Files queued',wizFiles.length?wizFiles.length+' file(s)':'None — add from Playground'],['Plan','Pro (7/50 instances)']].map(([k,v])=>`<div class="sum-row"><span class="sum-key">${k}</span><span class="sum-val">${v}</span></div>`).join('')}
+  </div>
+  ${wizFiles.length?`<div style="background:var(--bg2);border-radius:var(--radius);padding:10px 13px;margin-bottom:12px">
+    <div style="font-size:11px;font-weight:500;color:var(--text2);margin-bottom:6px">Files to ingest after creation</div>
+    ${wizFiles.map(f=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:4px;font-size:11px"><span>${f.icon}</span><span style="flex:1">${f.name}</span><span class="${f.cost==='free'?'cost-free':'cost-paid'}">${f.cost}</span></div>`).join('')}
+  </div>`:''}
+  <div class="cost-card">
+    <div><div style="font-size:12px;color:var(--text2)">Estimated cost per 1K queries</div><div style="font-size:10px;color:var(--text3)">Based on default models + conversion</div></div>
+    <div style="text-align:right"><div style="font-size:14px;font-weight:500">~$0.04</div><div style="font-size:10px;color:var(--text3)">+ embedding</div></div>
+  </div>
+  <div class="info-note">After creation you'll get an API key and file ingestion starts immediately in the background.</div>`;}
+
+go(2);
+</script>
+</body>
+</html>

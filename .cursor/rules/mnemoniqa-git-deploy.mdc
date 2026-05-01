@@ -1,0 +1,65 @@
+---
+description: Git remote github.com/n8node/maas, обязательный push после изменений, формат отчёта и деплой-команды для копирования
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Mnemoniqa — Git и деплой
+
+## Удалённый репозиторий
+
+- **Origin:** `https://github.com/n8node/maas.git`
+- Основная ветка: **`main`**.
+
+После значимых изменений кода или правил агент **делает commit и push** в `origin/main`, если пользователь не запретил и есть доступ к сети/git.
+
+## Отчёт пользователю после push
+
+После каждого успешного `git push` сообщить явно:
+
+1. **Ветка** (обычно `main`).
+2. **Хеш коммита (короткий)** — это и есть устойчивый «номер» ревизии на GitHub (например `a1b2c3d`).
+3. Прямая ссылка на коммит: `https://github.com/n8node/maas/commit/<FULL_SHA>` (полный SHA взять из вывода `git rev-parse HEAD` после push, если нужен точный линк).
+
+Фраза «номер пуша» в переписке = **короткий SHA последнего запушенного коммита** + при необходимости номер CI/run (если появится позже).
+
+## Команды деплоя для пользователя
+
+- Выдавать команды **полными блоками**, каждый сценарий — **отдельный fenced code block** с языком `bash`, без пропусков (`...`), чтобы пользователь копировал **одним кликом** весь блок.
+- Путь на сервере в примерах: `/opt/maas` (или актуальный из `memory-service-deploy.mdc` — при расхождении приоритет у скриптов в репозитории после их появления).
+
+### Шаблон: обновление на сервере (SSH + pull + compose)
+
+Пользователь подставляет свой пользователя и хост.
+
+```bash
+ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && git fetch origin && git checkout main && git pull origin main && docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d'
+```
+
+### Шаблон: только pull без билда (если образы не менялись)
+
+```bash
+ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && git pull origin main'
+```
+
+### Шаблон: миграции после деплоя (когда появится Makefile)
+
+```bash
+ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && make migrate'
+```
+
+При первом клонировании на пустой сервер:
+
+```bash
+ssh deploy@YOUR_SERVER_IP 'cd /opt && git clone https://github.com/n8node/maas.git && cd maas && cp .env.example .env'
+```
+
+## Локальный push (для копирования разработчиком)
+
+```bash
+cd /path/to/maas
+git add -A
+git status
+git commit -m "feat: your message"
+git push origin main
+```

@@ -1,0 +1,573 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MemoryService — Instance Detail</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#ffffff;--bg2:#f8f8f7;--bg3:#f3f2ef;
+  --text:#1a1a1a;--text2:#5f5e5a;--text3:#888780;
+  --border:#e8e7e3;--border2:#d3d1c7;
+  --radius:8px;--radius-lg:12px;
+  --font:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+  --mono:'SF Mono','Fira Mono',monospace;
+}
+body{font-family:var(--font);font-size:13px;background:var(--bg3);color:var(--text)}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:220px;flex-shrink:0;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh}
+.logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.logo-icon{width:28px;height:28px;background:#1a1a1a;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-name{font-size:14px;font-weight:500}
+.nav{flex:1;padding:12px 8px}
+.nav-label{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:10px 12px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:var(--radius);font-size:13px;color:var(--text2);text-decoration:none}
+.nav-item:hover{background:var(--bg2);color:var(--text)}
+.nav-item.active{background:var(--bg2);color:var(--text);font-weight:500}
+.nav-badge{margin-left:auto;font-size:10px;background:#e6f1fb;color:#185fa5;padding:2px 6px;border-radius:10px;font-weight:500}
+.sidebar-footer{padding:12px 16px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.avatar{width:28px;height:28px;border-radius:50%;background:#e6f1fb;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#185fa5}
+.main{margin-left:220px;flex:1;display:flex;flex-direction:column;background:var(--bg3)}
+.topbar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.breadcrumb{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text3)}
+.bc-cur{color:var(--text);font-weight:500}
+.topbar-right{display:flex;align-items:center;gap:7px}
+.status-pill{display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text2);background:var(--bg2);padding:3px 9px;border-radius:20px;border:1px solid var(--border)}
+.dot{width:6px;height:6px;border-radius:50%;background:#639922}
+.btn-xs{padding:4px 10px;border:1px solid var(--border2);border-radius:5px;background:transparent;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+.btn-xs:hover{background:var(--bg2)}
+.btn-xs.dark{background:#1a1a1a;color:#fff;border-color:#1a1a1a}
+.btn-xs.danger{color:#a32d2d;border-color:#f09595}
+.stat-strip{display:flex;background:var(--bg);border-bottom:1px solid var(--border);padding:14px 24px;gap:0}
+.stat-cell{flex:1;padding:0 16px;border-right:1px solid var(--border)}
+.stat-cell:first-child{padding-left:0}
+.stat-cell:last-child{border-right:none}
+.sv{font-size:18px;font-weight:500;letter-spacing:-0.02em}
+.sk{font-size:10px;color:var(--text3);margin-top:2px;text-transform:uppercase;letter-spacing:.04em}
+.ss{font-size:11px;color:var(--text3);margin-top:2px}
+.hrow{display:flex;align-items:center;gap:6px;margin-bottom:3px}
+.hl{font-size:10px;color:var(--text3);width:56px}
+.ht{flex:1;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
+.hf{height:100%;border-radius:2px}
+.hf-g{background:#639922}.hf-w{background:#ba7517}
+.hv{font-size:10px;font-weight:500;min-width:30px;text-align:right}
+.hv-g{color:#3b6d11}.hv-w{color:#ba7517}
+.tab-bar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 24px;display:flex;overflow-x:auto;position:sticky;top:52px;z-index:9}
+.tab{font-size:12px;color:var(--text2);padding:0 12px;height:40px;display:flex;align-items:center;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap;gap:5px}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--text);border-bottom-color:#1a1a1a;font-weight:500}
+.tb{font-size:9px;background:var(--bg2);color:var(--text3);padding:1px 5px;border-radius:7px}
+.tab.active .tb{background:#1a1a1a;color:#fff}
+.content{padding:20px 24px;flex:1}
+.panel{display:none}
+.panel.active{display:block}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px}
+.card:last-child{margin-bottom:0}
+.card-title{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;justify-content:space-between}
+.mode-tabs{display:flex;border:1px solid var(--border2);border-radius:var(--radius);overflow:hidden;width:fit-content;margin-bottom:12px}
+.mt{padding:5px 13px;font-size:12px;color:var(--text2);cursor:pointer;background:transparent;border:none;font-family:var(--font);border-right:1px solid var(--border2)}
+.mt:last-child{border-right:none}
+.mt:hover{background:var(--bg2)}
+.mt.active{background:#1a1a1a;color:#fff}
+textarea.pg{width:100%;border:1px solid var(--border2);border-radius:var(--radius);padding:9px;font-size:12px;resize:none;background:var(--bg);color:var(--text);font-family:var(--font);line-height:1.5}
+textarea.pg:focus{outline:none;border-color:#888}
+.meta-row{display:flex;gap:7px;margin-bottom:9px}
+.mi{flex:1;height:30px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 9px;font-size:12px;background:var(--bg);color:var(--text);font-family:var(--font)}
+.mi:focus{outline:none;border-color:#888}
+.ms{flex:1;height:30px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 9px;font-size:12px;background:var(--bg);color:var(--text);font-family:var(--font);cursor:pointer}
+.btn-ingest{background:#1a1a1a;color:#fff;border:none;border-radius:var(--radius);padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font);width:100%;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-ingest.purple{background:#534ab7}
+.btn-ingest:hover{opacity:.85}
+.dropzone{border:2px dashed var(--border2);border-radius:var(--radius);padding:16px;text-align:center;cursor:pointer;transition:border-color .12s,background .12s}
+.dropzone:hover{border-color:#888;background:var(--bg2)}
+.dz-title{font-size:13px;font-weight:500;margin-bottom:3px}
+.dz-sub{font-size:11px;color:var(--text3);margin-bottom:10px}
+.fmt-group{text-align:left;margin-bottom:7px}
+.fg-label{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px;display:flex;align-items:center;gap:5px}
+.fg-chips{display:flex;flex-wrap:wrap;gap:3px}
+.fc{font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px}
+.fc-doc{background:#e6f1fb;color:#185fa5}
+.fc-audio{background:#eaf3de;color:#3b6d11}
+.fc-video{background:#eeedfe;color:#534ab7}
+.fc-img{background:#faeeda;color:#854f0b}
+.fp-box{background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:10px}
+.fp-head{display:flex;align-items:flex-start;gap:9px;margin-bottom:9px}
+.fp-icon{font-size:20px;flex-shrink:0}
+.fp-name{font-size:13px;font-weight:500}
+.fp-size{font-size:11px;color:var(--text3);margin-top:2px}
+.fp-remove{margin-left:auto;background:none;border:none;cursor:pointer;color:var(--text3);font-size:18px;line-height:1;font-family:var(--font)}
+.conv-row{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:5px}
+.conv-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.conv-name{font-size:12px;font-weight:500;flex:1}
+.conv-desc{font-size:10px;color:var(--text3)}
+.badge-free{background:#eaf3de;color:#3b6d11}
+.badge-paid{background:#faeeda;color:#854f0b}
+.badge{font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px}
+.warn-row{display:flex;align-items:flex-start;gap:7px;padding:7px 10px;background:#faeeda;border-radius:var(--radius);font-size:11px;color:#633806;margin-bottom:5px;line-height:1.4}
+.task-item{display:flex;align-items:flex-start;gap:9px;padding:9px 0;border-bottom:1px solid var(--border)}
+.task-item:last-child{border-bottom:none}
+.ti-icon{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px;font-size:12px}
+.ti-name{font-size:12px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ti-meta{font-size:10px;color:var(--text3);margin-top:2px;display:flex;gap:6px}
+.stage-row{display:flex;align-items:center;margin-top:5px}
+.sd{width:14px;height:14px;border-radius:50%;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.sd.done{background:#1a1a1a;border-color:#1a1a1a}
+.sd.active{background:#faeeda;border-color:#ba7517}
+.sl{flex:1;height:1px;background:var(--border)}
+.sl.done{background:#1a1a1a}
+.stage-labels{display:flex;justify-content:space-between;margin-top:2px;padding:0 2px}
+.stage-labels span{font-size:8px;color:var(--text3);width:14px;text-align:center}
+.ts-active{background:#faeeda;color:#854f0b}
+.ts-done{background:#eaf3de;color:#3b6d11}
+.ts-queued{background:var(--bg2);color:var(--text3)}
+.qr-box{background:var(--bg2);border-radius:var(--radius);padding:10px 12px;font-size:12px;line-height:1.6;margin-bottom:8px}
+.cit{display:inline;background:#eeedfe;color:#534ab7;border-radius:3px;padding:0 3px;font-size:10px;font-weight:500}
+.cit-row{display:flex;gap:7px;align-items:flex-start;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:var(--radius);margin-bottom:5px}
+.cb{font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;flex-shrink:0}
+.cb-wiki{background:#eeedfe;color:#534ab7}
+.tbl{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;margin-bottom:10px}
+.tbl-head{padding:7px 14px;border-bottom:1px solid var(--border);background:var(--bg2);display:grid}
+.th{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+.tbl-row{padding:8px 14px;border-bottom:1px solid var(--border);cursor:pointer;display:grid;transition:background .1s}
+.tbl-row:last-child{border-bottom:none}
+.tbl-row:hover{background:var(--bg2)}
+.td{font-size:12px;display:flex;align-items:center;gap:5px}
+.st-active{background:#eaf3de;color:#3b6d11}
+.st-stale{background:#faeeda;color:#854f0b}
+.st-disputed{background:#fcebeb;color:#a32d2d}
+.cf-bar{display:flex;align-items:center;gap:5px}
+.cf-track{width:44px;height:3px;background:var(--bg2);border-radius:2px;overflow:hidden}
+.cf-fill{height:100%;border-radius:2px;background:#534ab7}
+.log-row{display:flex;gap:8px;padding:9px 14px;border-bottom:1px solid var(--border)}
+.log-row:last-child{border-bottom:none}
+.log-icon{width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;margin-top:1px}
+.log-act{font-size:12px}
+.log-rat{font-size:11px;color:var(--text3);font-style:italic;margin-top:2px}
+.log-meta{font-size:10px;color:var(--text3);margin-top:2px;font-family:var(--mono)}
+.ap{font-size:10px;font-weight:500;padding:1px 6px;border-radius:3px;margin-right:4px}
+.ap-create{background:#eaf3de;color:#3b6d11}
+.ap-attach{background:#e6f1fb;color:#185fa5}
+.ap-refine{background:#eeedfe;color:#534ab7}
+.ap-reject{background:#f1efe8;color:#5f5e5a}
+.gard-banner{background:#faeeda;border:1px solid #fac775;border-radius:var(--radius);padding:10px 14px;display:flex;align-items:center;justify-content:space-between;margin-bottom:12px}
+.gb-title{font-size:13px;font-weight:500;color:#412402;margin-bottom:2px}
+.gb-sub{font-size:11px;color:#633806}
+.btn-run{background:#ba7517;color:#fff;border:none;border-radius:var(--radius);padding:6px 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.prop-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;margin-bottom:10px}
+.prop-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:7px}
+.pt{font-size:10px;font-weight:500;padding:2px 8px;border-radius:4px}
+.pt-merge{background:#fbeaf0;color:#993556}
+.pt-split{background:#e6f1fb;color:#185fa5}
+.pt-noise{background:#f1efe8;color:#5f5e5a}
+.prop-candidates{font-size:13px;font-weight:500;margin-bottom:5px}
+.prop-rat{font-size:11px;color:var(--text3);font-style:italic;margin-bottom:10px;line-height:1.4}
+.prop-actions{display:flex;gap:6px}
+.btn-approve{background:#1a1a1a;color:#fff;border:none;border-radius:5px;padding:5px 14px;font-size:11px;font-weight:500;cursor:pointer;font-family:var(--font)}
+.btn-reject{background:transparent;border:1px solid var(--border2);border-radius:5px;padding:5px 14px;font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+.tb-toolbar{display:flex;gap:7px;margin-bottom:12px}
+.search{flex:1;height:30px;border:1px solid var(--border2);border-radius:var(--radius);padding:0 9px;font-size:12px;background:var(--bg);color:var(--text);font-family:var(--font)}
+.search:focus{outline:none;border-color:#888}
+.filter{height:30px;padding:0 10px;border:1px solid var(--border2);border-radius:var(--radius);background:var(--bg);font-size:11px;color:var(--text2);cursor:pointer;font-family:var(--font)}
+</style>
+</head>
+<body>
+<div class="layout">
+<div class="sidebar">
+  <div class="logo">
+    <div class="logo-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="8" r="2" fill="white" opacity=".9"/><circle cx="12" cy="4" r="1.5" fill="white" opacity=".6"/><circle cx="12" cy="12" r="1.5" fill="white" opacity=".6"/><line x1="6" y1="8" x2="10.5" y2="4.5" stroke="white" stroke-width=".8" opacity=".5"/><line x1="6" y1="8" x2="10.5" y2="11.5" stroke="white" stroke-width=".8" opacity=".5"/></svg></div>
+    <span class="logo-name">MemoryService</span>
+  </div>
+  <div class="nav">
+    <a class="nav-item" href="01-dashboard.html">Overview</a>
+    <a class="nav-item active" href="#">Instances <span class="nav-badge">8</span></a>
+    <a class="nav-item" href="02-agents.html">Agents</a>
+    <div class="nav-label">Developer</div>
+    <a class="nav-item" href="#">API Keys</a>
+    <a class="nav-item" href="#">Docs</a>
+    <a class="nav-item" href="#">Webhooks</a>
+    <div class="nav-label">Account</div>
+    <a class="nav-item" href="#">Billing</a>
+    <a class="nav-item" href="#">Settings</a>
+  </div>
+  <div class="sidebar-footer">
+    <div class="avatar">AK</div>
+    <div><div style="font-size:12px;font-weight:500">Alexey K.</div><div style="font-size:11px;color:var(--text3)">Pro plan</div></div>
+  </div>
+</div>
+<div class="main">
+  <div class="topbar">
+    <div class="breadcrumb"><span>Instances</span><span>›</span><span class="bc-cur">Product Knowledge Base</span></div>
+    <div class="topbar-right">
+      <div class="status-pill"><div class="dot"></div>Active</div>
+      <button class="btn-xs">Connect to Agent</button>
+      <button class="btn-xs">Settings</button>
+      <button class="btn-xs danger">Pause</button>
+    </div>
+  </div>
+  <div class="stat-strip">
+    <div class="stat-cell"><div class="sv" id="cc">0</div><div class="sk">Concepts</div><div class="ss" id="cs">0 stale · 0 disputed</div></div>
+    <div class="stat-cell"><div class="sv" id="sc">0</div><div class="sk">Sources</div><div class="ss" id="ss2">0 segments</div></div>
+    <div class="stat-cell"><div class="sv">0</div><div class="sk">Queries today</div><div class="ss">—</div></div>
+    <div class="stat-cell"><div class="sv">0</div><div class="sk">Tokens used</div><div class="ss">this month</div></div>
+    <div class="stat-cell" style="border-right:none">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:5px">Health</div>
+      <div class="hrow" id="h1"><span class="hl">Coverage</span><div class="ht"><div class="hf hf-g" id="hf1" style="width:0%"></div></div><span class="hv hv-g" id="hv1">—</span></div>
+      <div class="hrow" id="h2"><span class="hl">Purity</span><div class="ht"><div class="hf hf-g" id="hf2" style="width:0%"></div></div><span class="hv hv-g" id="hv2">—</span></div>
+      <div class="hrow"><span class="hl">Stale</span><div class="ht"><div class="hf hf-w" id="hf3" style="width:0%"></div></div><span class="hv hv-w" id="hv3">—</span></div>
+    </div>
+  </div>
+  <div class="tab-bar">
+    <div class="tab active" data-tab="playground" onclick="switchTab('playground')">Playground</div>
+    <div class="tab" data-tab="concepts" onclick="switchTab('concepts')">Concepts <span class="tb" id="tb-concepts">0</span></div>
+    <div class="tab" data-tab="sources" onclick="switchTab('sources')">Sources <span class="tb" id="tb-sources">0</span></div>
+    <div class="tab" data-tab="actionlog" onclick="switchTab('actionlog')">Action log <span class="tb" id="tb-log">0</span></div>
+    <div class="tab" data-tab="gardener" onclick="switchTab('gardener')">Gardener <span class="tb" id="tb-gard">0</span></div>
+  </div>
+  <div class="content">
+
+    <!-- PLAYGROUND -->
+    <div class="panel active" id="panel-playground">
+      <div class="two-col">
+        <div>
+          <div class="card">
+            <div class="card-title">Ingest</div>
+            <div class="mode-tabs">
+              <button class="mt active" onclick="setMode('text',this)">Text</button>
+              <button class="mt" onclick="setMode('file',this)">File</button>
+              <button class="mt" onclick="setMode('url',this)">URL</button>
+            </div>
+            <div id="m-text">
+              <textarea class="pg" rows="7" placeholder="Paste text or markdown…&#10;&#10;Example:&#10;# Product Roadmap Q3&#10;The engineering team will focus on:&#10;1. API rate limiting overhaul&#10;2. Webhooks system&#10;3. MCP server integration"></textarea>
+              <div class="meta-row" style="margin-top:8px"><input class="mi" placeholder="user_id (optional)"/><input class="mi" placeholder="source label"/></div>
+              <button class="btn-ingest" onclick="doIngest('txt','📋','doc','Direct','free')">
+                <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="9" stroke="white" stroke-width="1.2"/><polyline points="3,6.5 6,9.5 9,6.5" stroke="white" stroke-width="1.2" fill="none"/><line x1="1" y1="11" x2="11" y2="11" stroke="white" stroke-width="1.2"/></svg>
+                Ingest async
+              </button>
+            </div>
+            <div id="m-file" style="display:none">
+              <div id="dz-empty">
+                <div class="dropzone" onclick="pickFile()">
+                  <div style="width:32px;height:32px;border-radius:7px;background:var(--bg2);display:flex;align-items:center;justify-content:center;margin:0 auto 8px"><svg width="14" height="14" viewBox="0 0 14 14" fill="none"><path d="M7 2v9M4 8l3-3 3 3" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/><path d="M1.5 12.5h11" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg></div>
+                  <div class="dz-title">Drop file here or click to browse</div>
+                  <div class="dz-sub">Up to 500 MB per file</div>
+                  <div class="fmt-group"><div class="fg-label">Documents <span class="fc fc-doc">Docling · free</span></div><div class="fg-chips">${['PDF','DOCX','XLSX','PPTX','MD','TXT','HTML','EPUB'].map(f=>`<span class="fc fc-doc">${f}</span>`).join('')}</div></div>
+                  <div class="fmt-group"><div class="fg-label">Audio <span class="fc fc-audio">Whisper · ~$0.006/min</span></div><div class="fg-chips">${['MP3','WAV','M4A','OGG'].map(f=>`<span class="fc fc-audio">${f}</span>`).join('')}</div></div>
+                  <div class="fmt-group"><div class="fg-label">Video <span class="fc fc-video">ffmpeg + Whisper</span></div><div class="fg-chips">${['MP4','MOV','WEBM','MKV'].map(f=>`<span class="fc fc-video">${f}</span>`).join('')}</div></div>
+                  <div class="fmt-group" style="margin-bottom:0"><div class="fg-label">Images &amp; scanned PDF <span class="fc fc-img">Vision OCR · ~$0.002/page</span></div><div class="fg-chips">${['JPG','PNG','WEBP','TIFF','BMP'].map(f=>`<span class="fc fc-img">${f}</span>`).join('')}</div></div>
+                </div>
+              </div>
+              <div id="dz-preview" style="display:none">
+                <div class="fp-box">
+                  <div class="fp-head">
+                    <div class="fp-icon" id="fp-icon">📄</div>
+                    <div style="flex:1"><div class="fp-name" id="fp-name"></div><div class="fp-size" id="fp-size"></div></div>
+                    <button class="fp-remove" onclick="clearFile()">×</button>
+                  </div>
+                  <div class="conv-row">
+                    <div class="conv-icon" id="conv-icon" style="background:#e6f1fb"><div style="width:8px;height:8px;border-radius:50%;background:#185fa5"></div></div>
+                    <div style="flex:1"><div class="conv-name" id="conv-name">Docling</div><div class="conv-desc" id="conv-desc"></div></div>
+                    <span class="badge" id="conv-badge">free</span>
+                    <span style="font-size:11px;color:var(--text3);margin-left:8px" id="conv-time"></span>
+                  </div>
+                  <div id="conv-warn" style="display:none" class="warn-row">
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" style="flex-shrink:0"><path d="M6 1L11.5 10.5H.5L6 1z" stroke="#ba7517" stroke-width="1"/><line x1="6" y1="4.5" x2="6" y2="7.5" stroke="#ba7517" stroke-width="1"/><circle cx="6" cy="9.5" r=".6" fill="#ba7517"/></svg>
+                    <span id="conv-warn-text"></span>
+                  </div>
+                </div>
+                <div class="meta-row"><input class="mi" placeholder="user_id (optional)"/><input class="mi" placeholder="source label"/></div>
+                <button class="btn-ingest" id="btn-file-ingest" onclick="doFileIngest()">
+                  <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><line x1="6" y1="1" x2="6" y2="9" stroke="white" stroke-width="1.2"/><polyline points="3,6.5 6,9.5 9,6.5" stroke="white" stroke-width="1.2" fill="none"/><line x1="1" y1="11" x2="11" y2="11" stroke="white" stroke-width="1.2"/></svg>
+                  Ingest async
+                </button>
+              </div>
+            </div>
+            <div id="m-url" style="display:none">
+              <div style="display:flex;gap:7px;margin-bottom:8px"><input class="mi" placeholder="https://example.com/document.pdf"/><button class="btn-xs">Detect</button></div>
+              <div style="background:#f1efe8;border-radius:var(--radius);padding:7px 10px;font-size:11px;color:#5f5e5a;margin-bottom:9px">URL ingest coming in Phase 5+</div>
+              <div class="meta-row"><input class="mi" placeholder="user_id (optional)"/><input class="mi" placeholder="source label"/></div>
+              <button class="btn-ingest" style="opacity:.5;cursor:not-allowed">Ingest async (coming soon)</button>
+            </div>
+          </div>
+          <div class="card">
+            <div class="card-title">Task queue <span style="font-size:10px;font-weight:400;color:var(--text3)">auto-refresh</span></div>
+            <div id="task-list"><div style="font-size:12px;color:var(--text3);text-align:center;padding:14px 0">No tasks yet</div></div>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="height:100%">
+            <div class="card-title">Query</div>
+            <textarea class="pg" id="q-input" rows="3" placeholder="Ask anything about the knowledge base…"></textarea>
+            <div class="meta-row" style="margin-top:8px;margin-bottom:8px">
+              <input class="mi" placeholder="user_id (optional)"/>
+              <select class="ms"><option>top_k = 5</option><option>top_k = 10</option><option>top_k = 3</option></select>
+            </div>
+            <button class="btn-ingest purple" style="margin-bottom:14px" onclick="doQuery()">
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="none"><circle cx="5" cy="5" r="3.5" stroke="white" stroke-width="1.2"/><line x1="7.5" y1="7.5" x2="11" y2="11" stroke="white" stroke-width="1.3"/></svg>
+              Run query
+            </button>
+            <div id="q-empty" style="padding:20px;text-align:center;color:var(--text3);font-size:12px">Ingest data first, then query returns answers with citations</div>
+            <div id="q-result" style="display:none">
+              <div style="font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:5px">Answer</div>
+              <div class="qr-box">The Q3 priorities focus on three initiatives <span class="cit">[Wiki:concept_q3]</span>. Rate limiting overhaul <span class="cit">[Wiki:concept_rl]</span> and webhooks system <span class="cit">[Wiki:concept_wh]</span> are highest priority.</div>
+              <div style="display:flex;justify-content:space-between;margin-bottom:6px"><div style="font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em">Citations</div><div style="font-size:10px;color:var(--text3)">3 citations · 312ms</div></div>
+              <div class="cit-row"><span class="cb cb-wiki">Wiki</span><span style="font-size:11px;color:var(--text2);flex:1">Q3 Engineering Priorities — fact, 5 evidence spans</span><span style="font-size:10px;color:var(--text3)">0.95</span></div>
+              <div class="cit-row"><span class="cb cb-wiki">Wiki</span><span style="font-size:11px;color:var(--text2);flex:1">API Rate Limiting — project, confidence 0.88</span><span style="font-size:10px;color:var(--text3)">0.88</span></div>
+              <div class="cit-row"><span class="cb cb-wiki">Wiki</span><span style="font-size:11px;color:var(--text2);flex:1">Webhooks System — project, 2 evidence spans</span><span style="font-size:10px;color:var(--text3)">0.82</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- CONCEPTS -->
+    <div class="panel" id="panel-concepts">
+      <div class="tb-toolbar"><input class="search" placeholder="Search concepts…"/><button class="filter">All</button><button class="filter">Active</button><button class="filter">Stale</button><button class="filter">Disputed</button></div>
+      <div class="tbl">
+        <div class="tbl-head" style="grid-template-columns:1fr 80px 70px 110px 60px"><div class="th">Concept</div><div class="th">Type</div><div class="th">State</div><div class="th">Confidence</div><div class="th">Evidence</div></div>
+        <div id="concept-rows"></div>
+      </div>
+    </div>
+
+    <!-- SOURCES -->
+    <div class="panel" id="panel-sources">
+      <div id="src-empty" style="padding:40px;text-align:center;color:var(--text3);font-size:12px">No sources yet — ingest something from Playground</div>
+      <div class="tbl" id="src-table" style="display:none">
+        <div class="tbl-head" style="grid-template-columns:1fr 80px 80px 100px 80px"><div class="th">Source</div><div class="th">Size</div><div class="th">Segments</div><div class="th">Converter</div><div class="th">Indexed</div></div>
+        <div id="src-rows"></div>
+      </div>
+    </div>
+
+    <!-- ACTION LOG -->
+    <div class="panel" id="panel-actionlog">
+      <div id="log-empty" style="padding:40px;text-align:center;color:var(--text3);font-size:12px">No actions yet</div>
+      <div class="tbl" id="log-list" style="display:none"></div>
+    </div>
+
+    <!-- GARDENER -->
+    <div class="panel" id="panel-gardener">
+      <div class="gard-banner">
+        <div><div class="gb-title" id="gard-title">No proposals yet</div><div class="gb-sub" id="gard-sub">Run triage after ingesting data</div></div>
+        <button class="btn-run" onclick="runTriage()">Run triage</button>
+      </div>
+      <div id="proposals"></div>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<script>
+// State
+const S={concepts:[],sources:[],log:[],tasks:[],proposals:[]};
+const tColors={fact:'#185fa5',project:'#534ab7',event:'#3b6d11',entity:'#854f0b',belief:'#993c1d',tension:'#993556'};
+const tBgs={fact:'#e6f1fb',project:'#eeedfe',event:'#eaf3de',entity:'#faeeda',belief:'#faece7',tension:'#fbeaf0'};
+const sampleConcepts=[
+  {t:'Q3 Engineering Priorities',type:'fact',state:'active',conf:0.95,ev:5},
+  {t:'API Rate Limiting',type:'project',state:'active',conf:0.88,ev:3},
+  {t:'Webhooks System',type:'project',state:'active',conf:0.82,ev:2},
+  {t:'MCP Server Integration',type:'project',state:'active',conf:0.79,ev:2},
+  {t:'Rate limit overhaul deadline',type:'event',state:'stale',conf:0.55,ev:1},
+  {t:'Engineering Team',type:'entity',state:'disputed',conf:0.41,ev:2},
+];
+const sampleLog=[
+  {act:'create',c:'Q3 Engineering Priorities',actor:'worker:extract',rat:'New concept — no similar in memory',bg:'#eaf3de',col:'#3b6d11'},
+  {act:'attach',c:'Q3 Engineering Priorities',actor:'worker:route',rat:'Evidence span overlap, confidence ↑0.12',bg:'#e6f1fb',col:'#185fa5'},
+  {act:'create',c:'API Rate Limiting',actor:'worker:extract',rat:'Distinct project concept, 3 evidence spans',bg:'#eaf3de',col:'#3b6d11'},
+  {act:'refine',c:'API Rate Limiting',actor:'worker:route',rat:'Updated description — new evidence adds scope',bg:'#eeedfe',col:'#534ab7'},
+  {act:'reject',c:null,actor:'worker:route',rat:'Candidate "team" too generic → residuals',bg:'#f1efe8',col:'#5f5e5a'},
+  {act:'create',c:'Webhooks System',actor:'worker:extract',rat:'New project hypothesis, 2 evidence spans',bg:'#eaf3de',col:'#3b6d11'},
+];
+const fmtData={
+  pdf:{icon:'📄',conv:'Docling',desc:'Text layer detected',bg:'#e6f1fb',col:'#185fa5',cost:'free',time:'~5s',badge:'badge-free'},
+  docx:{icon:'📝',conv:'Docling',desc:'Word document extraction',bg:'#e6f1fb',col:'#185fa5',cost:'free',time:'~3s',badge:'badge-free'},
+  md:{icon:'📋',conv:'Direct',desc:'Plain text, no conversion',bg:'#eaf3de',col:'#3b6d11',cost:'free',time:'~1s',badge:'badge-free'},
+  txt:{icon:'📋',conv:'Direct',desc:'Plain text, no conversion',bg:'#eaf3de',col:'#3b6d11',cost:'free',time:'~1s',badge:'badge-free'},
+  mp3:{icon:'🎵',conv:'Whisper (OpenRouter)',desc:'Audio transcription via openai/whisper-1',bg:'#eaf3de',col:'#3b6d11',cost:'~$0.006/min',time:'~1.5× dur',badge:'badge-paid',warn:''},
+  mp4:{icon:'🎬',conv:'ffmpeg + Whisper',desc:'Extract audio → transcribe via whisper-1',bg:'#eeedfe',col:'#534ab7',cost:'~$0.006/min',time:'~2× dur',badge:'badge-paid',warn:'Files >25 MB split automatically'},
+  jpg:{icon:'🖼️',conv:'Vision OCR (OpenRouter)',desc:'Image → text via gemini-2.5-flash',bg:'#faeeda',col:'#854f0b',cost:'~$0.002/img',time:'~3s',badge:'badge-paid'},
+  png:{icon:'🖼️',conv:'Vision OCR (OpenRouter)',desc:'Image → text via gemini-2.5-flash',bg:'#faeeda',col:'#854f0b',cost:'~$0.002/img',time:'~3s',badge:'badge-paid'},
+};
+const sampleFiles=[
+  {name:'roadmap-q3.pdf',size:'2.4 MB',ext:'pdf'},
+  {name:'interview.mp3',size:'45 MB',ext:'mp3'},
+  {name:'demo.mp4',size:'180 MB',ext:'mp4'},
+  {name:'screenshot.png',size:'1.1 MB',ext:'png'},
+  {name:'spec.docx',size:'800 KB',ext:'docx'},
+];
+let sfi=0,currentFile=null;
+
+function switchTab(t){
+  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('active',x.dataset.tab===t));
+  document.querySelectorAll('.panel').forEach(x=>x.classList.toggle('active',x.id==='panel-'+t));
+}
+function setMode(m,btn){
+  ['text','file','url'].forEach(x=>{document.getElementById('m-'+x).style.display=x===m?'':'none';});
+  btn.parentNode.querySelectorAll('.mt').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+function pickFile(){
+  const f=sampleFiles[sfi%sampleFiles.length];sfi++;
+  const fmt=fmtData[f.ext]||{icon:'📄',conv:'Docling',desc:'',bg:'#e6f1fb',col:'#185fa5',cost:'free',time:'~5s',badge:'badge-free'};
+  currentFile={...f,...fmt};
+  document.getElementById('fp-icon').textContent=fmt.icon;
+  document.getElementById('fp-name').textContent=f.name;
+  document.getElementById('fp-size').textContent=f.size+' · '+f.ext.toUpperCase();
+  document.getElementById('conv-icon').style.background=fmt.bg;
+  document.getElementById('conv-icon').innerHTML=`<div style="width:8px;height:8px;border-radius:50%;background:${fmt.col}"></div>`;
+  document.getElementById('conv-name').textContent=fmt.conv;
+  document.getElementById('conv-desc').textContent=f.ext==='pdf'?'Detecting text layer — fallback to Vision OCR if scanned':fmt.desc;
+  document.getElementById('conv-time').textContent=fmt.time;
+  const badge=document.getElementById('conv-badge');
+  badge.textContent=fmt.cost;badge.className='badge '+fmt.badge;
+  const warn=document.getElementById('conv-warn');
+  if(fmt.warn){warn.style.display='flex';document.getElementById('conv-warn-text').textContent=fmt.warn;}
+  else warn.style.display='none';
+  document.getElementById('dz-empty').style.display='none';
+  document.getElementById('dz-preview').style.display='';
+}
+function clearFile(){currentFile=null;document.getElementById('dz-empty').style.display='';document.getElementById('dz-preview').style.display='none';}
+function doFileIngest(){if(!currentFile)return;doIngest(currentFile.ext,currentFile.icon,currentFile.ext,currentFile.conv,currentFile.cost,currentFile.name);clearFile();}
+
+function doIngest(ext,icon,group,conv,cost,name){
+  const stages=['queued','converting','chunking','embedding','extraction','routing','done'];
+  const fastStages=['queued','chunking','embedding','done'];
+  const useStages=(ext==='txt'||ext==='md')?fastStages:stages;
+  const task={id:Date.now(),name:name||(ext==='txt'?'Manual text ingest':ext),icon,conv,cost,stage:'queued',done:false};
+  S.tasks.unshift(task);renderTasks();
+  let si=0;
+  const iv=setInterval(()=>{
+    si++;
+    if(si<useStages.length){task.stage=useStages[si];renderTasks();}
+    else{
+      clearInterval(iv);task.stage='done';task.done=true;renderTasks();
+      if(S.concepts.length===0){
+        S.concepts=[...sampleConcepts];S.log=[...sampleLog];
+        S.sources.push({name:name||'Manual ingest',size:Math.floor(Math.random()*4+1)+'.'+Math.floor(Math.random()*9)+' MB',segs:Math.floor(Math.random()*10+3),conv:conv,date:'just now'});
+        updateStats();renderConcepts();renderLog();renderSources();
+        document.getElementById('q-empty').style.display='none';
+        document.getElementById('q-result').style.display='';
+      } else {
+        S.sources.push({name:name||'Manual ingest',size:'1.2 MB',segs:5,conv:conv,date:'just now'});
+        document.getElementById('tb-sources').textContent=S.sources.length;
+        renderSources();
+      }
+    }
+  },800);
+}
+
+function renderTasks(){
+  const el=document.getElementById('task-list');
+  if(!S.tasks.length){el.innerHTML='<div style="font-size:12px;color:var(--text3);text-align:center;padding:14px 0">No tasks yet</div>';return;}
+  const stages7=['Q','Conv','Chunk','Embed','Extr','Route','✓'];
+  const stages4=['Q','Chunk','Embed','✓'];
+  el.innerHTML=S.tasks.slice(0,4).map(t=>{
+    const isFast=t.stage==='done'&&t.conv==='Direct';
+    const stgs=isFast?['queued','chunking','embedding','done']:['queued','converting','chunking','embedding','extraction','routing','done'];
+    const lbls=isFast?stages4:stages7;
+    const si=stgs.indexOf(t.stage);
+    const segs=stgs.map((s,i)=>`${i>0?`<div class="sl ${i<=si?'done':''}"></div>`:''}${`<div class="sd ${i<si?'done':i===si&&!t.done?'active':'pending'}">${i<si?`<svg width="6" height="6" viewBox="0 0 6 6" fill="none"><polyline points="1,3 2.5,4.5 5,1.5" stroke="white" stroke-width=".9"/></svg>`:''}</div>`}`).join('');
+    return `<div class="task-item">
+      <div class="ti-icon" style="background:#eeedfe">${t.icon||'📄'}</div>
+      <div style="flex:1;min-width:0">
+        <div class="ti-name">${t.name}</div>
+        <div class="ti-meta"><span>${t.conv}</span><span style="color:${t.cost==='free'?'#3b6d11':'#854f0b'}">${t.cost}</span></div>
+        <div class="stage-row">${segs}</div>
+        <div class="stage-labels">${lbls.map(l=>`<span>${l}</span>`).join('')}</div>
+      </div>
+      <span class="badge ${t.done?'ts-done':t.stage==='queued'?'ts-queued':'ts-active'}" style="margin-left:6px;flex-shrink:0">${t.done?'Done':t.stage}</span>
+    </div>`;
+  }).join('');
+}
+
+function updateStats(){
+  const cc=S.concepts.length;
+  document.getElementById('cc').textContent=cc;
+  document.getElementById('cs').textContent=S.concepts.filter(c=>c.state==='stale').length+' stale · '+S.concepts.filter(c=>c.state==='disputed').length+' disputed';
+  document.getElementById('sc').textContent=S.sources.length;
+  document.getElementById('ss2').textContent=S.sources.reduce((a,s)=>a+s.segs,0)+' segments';
+  document.getElementById('tb-concepts').textContent=cc;
+  document.getElementById('tb-log').textContent=S.log.length;
+  document.getElementById('hf1').style.width='82%';document.getElementById('hv1').textContent='82%';
+  document.getElementById('hf2').style.width='88%';document.getElementById('hv2').textContent='0.88';
+  document.getElementById('hf3').style.width='14%';document.getElementById('hv3').textContent='14%';
+}
+
+function renderConcepts(){
+  document.getElementById('concept-rows').innerHTML=S.concepts.map(c=>`
+  <div class="tbl-row" style="grid-template-columns:1fr 80px 70px 110px 60px">
+    <div class="td" style="font-weight:500;gap:6px"><div style="width:6px;height:6px;border-radius:50%;background:${tColors[c.type]||'#888'};flex-shrink:0"></div>${c.t}</div>
+    <div class="td"><span style="font-size:10px;background:${tBgs[c.type]||'#eee'};color:${tColors[c.type]||'#666'};padding:2px 6px;border-radius:3px;font-weight:500">${c.type}</span></div>
+    <div class="td"><span class="badge ${c.state==='active'?'st-active':c.state==='stale'?'st-stale':'st-disputed'}">${c.state}</span></div>
+    <div class="td"><div class="cf-bar"><div class="cf-track"><div class="cf-fill" style="width:${Math.round(c.conf*100)}%"></div></div><span style="font-size:11px;color:var(--text2)">${c.conf.toFixed(2)}</span></div></div>
+    <div class="td" style="color:var(--text2)">${c.ev}</div>
+  </div>`).join('');
+}
+
+function renderLog(){
+  const el=document.getElementById('log-list');
+  document.getElementById('log-empty').style.display='none';
+  el.style.display='';
+  el.innerHTML=S.log.map(l=>`<div class="log-row">
+    <div class="log-icon" style="background:${l.bg}"><div style="width:8px;height:8px;border-radius:50%;background:${l.col}"></div></div>
+    <div style="flex:1"><div class="log-act"><span class="ap ap-${l.act}">${l.act}</span>${l.c?`<strong>${l.c}</strong>`:'candidate → residuals'}</div><div class="log-rat">${l.rat}</div><div class="log-meta">${l.actor} · just now</div></div>
+  </div>`).join('');
+}
+
+function renderSources(){
+  const empty=document.getElementById('src-empty'),tbl=document.getElementById('src-table');
+  if(!S.sources.length)return;
+  empty.style.display='none';tbl.style.display='';
+  document.getElementById('src-rows').innerHTML=S.sources.map(s=>`<div class="tbl-row" style="grid-template-columns:1fr 80px 80px 100px 80px">
+    <div class="td" style="font-weight:500">${s.name}</div>
+    <div class="td" style="color:var(--text2)">${s.size}</div>
+    <div class="td">${s.segs}</div>
+    <div class="td"><span style="font-size:10px;background:${s.conv==='Direct'||s.conv==='Docling'?'#eaf3de':'#faeeda'};color:${s.conv==='Direct'||s.conv==='Docling'?'#3b6d11':'#854f0b'};padding:2px 6px;border-radius:3px;font-weight:500">${s.conv}</span></div>
+    <div class="td" style="color:var(--text3)">${s.date}</div>
+  </div>`).join('');
+  document.getElementById('tb-sources').textContent=S.sources.length;
+}
+
+function doQuery(){document.getElementById('q-empty').style.display='none';document.getElementById('q-result').style.display='';}
+
+function runTriage(){
+  if(!S.concepts.length){alert('Ingest data first before running triage');return;}
+  const btn=event.target;btn.textContent='Running…';btn.disabled=true;
+  setTimeout(()=>{
+    btn.textContent='Run triage';btn.disabled=false;
+    S.proposals=[
+      {type:'merge',cls:'pt-merge',cands:'API Rate Limiting + Rate limit overhaul deadline',rat:'Semantic overlap 0.91 — recommend merging as evidence span'},
+      {type:'split',cls:'pt-split',cands:'Q3 Engineering Priorities',rat:'Contains 3 distinct project refs — split improves purity 0.62→0.91'},
+      {type:'noise',cls:'pt-noise',cands:'Engineering Team',rat:'Too generic, no distinguishing attributes — recommend archive'},
+    ];
+    document.getElementById('gard-title').textContent=S.proposals.length+' proposals ready';
+    document.getElementById('gard-sub').textContent='Phase 0 triage complete — review before applying';
+    document.getElementById('tb-gard').textContent=S.proposals.length;
+    renderProposals();
+  },2000);
+}
+
+function renderProposals(){
+  document.getElementById('proposals').innerHTML=S.proposals.map((p,i)=>`
+  <div class="prop-card" id="prop-${i}">
+    <div class="prop-head"><span class="pt ${p.cls}">${p.type}</span><span style="font-size:11px;color:var(--text3)">Proposal #${i+1}</span></div>
+    <div class="prop-candidates">${p.cands}</div>
+    <div class="prop-rat">${p.rat}</div>
+    <div class="prop-actions">
+      <button class="btn-approve" onclick="actProp(${i},'approve')">Approve</button>
+      <button class="btn-reject" onclick="actProp(${i},'reject')">Reject</button>
+    </div>
+  </div>`).join('');
+}
+function actProp(i,act){
+  const el=document.getElementById('prop-'+i);
+  el.style.opacity='.4';el.style.pointerEvents='none';
+  const badge=document.createElement('span');
+  badge.style.cssText=`font-size:10px;font-weight:500;padding:2px 8px;border-radius:4px;background:${act==='approve'?'#eaf3de':'#f1efe8'};color:${act==='approve'?'#3b6d11':'#5f5e5a'}`;
+  badge.textContent=act==='approve'?'Approved':'Rejected';
+  el.querySelector('.prop-head').appendChild(badge);
+}
+</script>
+</body>
+</html>

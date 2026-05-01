@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/><meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>MemoryService — API Keys</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#ffffff;--bg2:#f8f8f7;--bg3:#f3f2ef;--text:#1a1a1a;--text2:#5f5e5a;--text3:#888780;--border:#e8e7e3;--border2:#d3d1c7;--r:8px;--rl:12px;--f:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;--mono:'SF Mono','Fira Mono',monospace}
+body{font-family:var(--f);font-size:13px;background:var(--bg3);color:var(--text)}
+.layout{display:flex;min-height:100vh}
+.sidebar{width:220px;flex-shrink:0;background:var(--bg);border-right:1px solid var(--border);display:flex;flex-direction:column;position:fixed;top:0;left:0;height:100vh}
+.logo{padding:20px 20px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.logo-icon{width:28px;height:28px;background:#1a1a1a;border-radius:6px;display:flex;align-items:center;justify-content:center}
+.logo-name{font-size:14px;font-weight:500}
+.nav{flex:1;padding:12px 8px;overflow-y:auto}
+.nav-lbl{font-size:10px;font-weight:500;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;padding:10px 12px 4px}
+.nav-item{display:flex;align-items:center;gap:8px;padding:7px 12px;border-radius:var(--r);font-size:13px;color:var(--text2);text-decoration:none}
+.nav-item:hover{background:var(--bg2);color:var(--text)}
+.nav-item.active{background:var(--bg2);color:var(--text);font-weight:500}
+.nb{margin-left:auto;font-size:10px;background:#e6f1fb;color:#185fa5;padding:2px 6px;border-radius:10px;font-weight:500}
+.sf{padding:12px 16px 16px;border-top:1px solid var(--border);display:flex;align-items:center;gap:8px}
+.av{width:28px;height:28px;border-radius:50%;background:#e6f1fb;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#185fa5}
+.main{margin-left:220px;flex:1;background:var(--bg3)}
+.topbar{background:var(--bg);border-bottom:1px solid var(--border);padding:0 24px;height:52px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:10}
+.tb-title{font-size:15px;font-weight:500}
+.content{padding:24px;max-width:800px}
+.card{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:18px 20px;margin-bottom:14px}
+.ct{font-size:11px;font-weight:500;color:var(--text2);margin-bottom:14px;text-transform:uppercase;letter-spacing:.05em;display:flex;align-items:center;justify-content:space-between}
+.btn{border-radius:var(--r);padding:6px 14px;font-size:12px;font-weight:500;cursor:pointer;font-family:var(--f);border:1px solid var(--border2);background:transparent;color:var(--text2)}
+.btn:hover{background:var(--bg2)}
+.btn-dark{background:#1a1a1a;color:#fff;border-color:#1a1a1a;display:flex;align-items:center;gap:5px}
+.btn-dark:hover{opacity:.85}
+.btn-red{border-color:#f09595;color:#a32d2d;background:transparent}
+/* new key banner */
+.new-key-banner{background:#eaf3de;border:1px solid #a3c97a;border-radius:var(--r);padding:14px 16px;margin-bottom:16px;position:relative}
+.nkb-title{font-size:13px;font-weight:500;color:#1f4a09;margin-bottom:4px;display:flex;align-items:center;gap:7px}
+.nkb-sub{font-size:11px;color:#3b6d11;margin-bottom:10px}
+.nkb-key{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid #a3c97a;border-radius:var(--r);padding:9px 12px;display:flex;align-items:center;justify-content:space-between;gap:10px}
+.nkb-key-val{color:#1a1a1a;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.copy-btn{font-size:11px;font-weight:500;padding:4px 10px;border:1px solid #a3c97a;border-radius:5px;background:transparent;color:#3b6d11;cursor:pointer;font-family:var(--f);white-space:nowrap}
+.copy-btn.copied{background:#3b6d11;color:#fff;border-color:#3b6d11}
+/* key table */
+.key-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden;margin-bottom:10px}
+.key-head{padding:10px 16px;display:grid;grid-template-columns:1fr 130px 130px 100px 90px;border-bottom:1px solid var(--border);background:var(--bg2)}
+.kh{font-size:10px;font-weight:500;color:var(--text3);text-transform:uppercase;letter-spacing:.05em}
+.key-row{padding:12px 16px;display:grid;grid-template-columns:1fr 130px 130px 100px 90px;border-bottom:1px solid var(--border);align-items:center}
+.key-row:last-child{border-bottom:none}
+.key-row:hover{background:var(--bg2)}
+.key-name{font-size:13px;font-weight:500}
+.key-val{font-family:var(--mono);font-size:11px;color:var(--text3);margin-top:2px;display:flex;align-items:center;gap:5px}
+.key-status{font-size:10px;font-weight:500;padding:2px 7px;border-radius:4px}
+.ks-active{background:#eaf3de;color:#3b6d11}
+.ks-inactive{background:#f1efe8;color:#5f5e5a}
+.key-actions{display:flex;gap:5px}
+.btn-xs{font-size:11px;padding:3px 9px;border-radius:5px;cursor:pointer;border:1px solid var(--border);background:transparent;color:var(--text2);font-family:var(--f)}
+.btn-xs:hover{background:var(--bg2)}
+.btn-xs.red{color:#a32d2d;border-color:#f09595}
+/* scope pills */
+.scope-pill{font-size:10px;font-weight:500;padding:2px 7px;border-radius:10px;border:1px solid var(--border2);color:var(--text2);background:var(--bg);margin-right:3px;margin-bottom:2px;display:inline-block}
+.sp-full{background:#f1efe8;border-color:#d3d1c7;color:#2c2c2a}
+.sp-read{background:#e6f1fb;border-color:#b5d4f4;color:#185fa5}
+.sp-inst{background:#eeedfe;border-color:#c4bff6;color:#534ab7}
+/* usage bar mini */
+.ub-wrap{height:3px;background:var(--bg2);border-radius:2px;overflow:hidden;margin-top:3px}
+.ub-fill{height:100%;border-radius:2px;background:#1a1a1a}
+/* modal */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.35);z-index:100;display:flex;align-items:center;justify-content:center;opacity:0;pointer-events:none;transition:opacity .15s}
+.overlay.open{opacity:1;pointer-events:all}
+.modal{background:var(--bg);border-radius:var(--rl);padding:24px;width:480px;max-width:94vw;box-shadow:0 8px 32px rgba(0,0,0,.15)}
+.modal-title{font-size:15px;font-weight:500;margin-bottom:4px}
+.modal-sub{font-size:12px;color:var(--text3);margin-bottom:18px}
+.form-row{margin-bottom:14px}
+.form-label{font-size:12px;color:var(--text2);margin-bottom:5px;display:block}
+.form-hint{font-size:11px;color:var(--text3);margin-top:3px}
+.inp{width:100%;height:34px;border:1px solid var(--border2);border-radius:var(--r);padding:0 10px;font-size:13px;background:var(--bg);color:var(--text);font-family:var(--f)}
+.inp:focus{outline:none;border-color:#888}
+.modal-footer{display:flex;justify-content:flex-end;gap:8px;margin-top:18px;padding-top:14px;border-top:1px solid var(--border)}
+/* scope checkboxes */
+.scope-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.sc-item{border:1px solid var(--border);border-radius:var(--r);padding:9px 12px;cursor:pointer;transition:border-color .12s;display:flex;align-items:flex-start;gap:8px}
+.sc-item:hover{border-color:var(--border2)}
+.sc-item.checked{border-color:#1a1a1a;background:#f8f8f7}
+.sc-item input{width:12px;height:12px;margin-top:2px;flex-shrink:0}
+.sc-item-title{font-size:12px;font-weight:500}
+.sc-item-desc{font-size:10px;color:var(--text3);margin-top:2px}
+/* usage log */
+.log-tbl{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);overflow:hidden}
+.log-head{padding:7px 14px;background:var(--bg2);display:grid;border-bottom:1px solid var(--border)}
+.log-row{padding:8px 14px;border-bottom:1px solid var(--border);display:grid}
+.log-row:last-child{border-bottom:none}
+.log-row:hover{background:var(--bg2)}
+.lc{font-size:12px;display:flex;align-items:center;gap:5px}
+.method-get{color:#3b6d11;font-weight:500}
+.method-post{color:#185fa5;font-weight:500}
+.method-del{color:#a32d2d;font-weight:500}
+.status-ok{color:#3b6d11}
+.status-err{color:#a32d2d}
+/* two col */
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
+.stat-card{background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:14px 16px}
+.sv{font-size:20px;font-weight:500;letter-spacing:-0.02em}
+.sk{font-size:10px;color:var(--text3);text-transform:uppercase;letter-spacing:.04em;margin-top:3px}
+.ss{font-size:11px;color:var(--text3);margin-top:2px}
+</style>
+</head>
+<body>
+<div class="layout">
+<div class="sidebar">
+  <div class="logo"><div class="logo-icon"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><circle cx="4" cy="8" r="2" fill="white" opacity=".9"/><circle cx="12" cy="4" r="1.5" fill="white" opacity=".6"/><circle cx="12" cy="12" r="1.5" fill="white" opacity=".6"/><line x1="6" y1="8" x2="10.5" y2="4.5" stroke="white" stroke-width=".8" opacity=".5"/><line x1="6" y1="8" x2="10.5" y2="11.5" stroke="white" stroke-width=".8" opacity=".5"/></svg></div><span class="logo-name">MemoryService</span></div>
+  <div class="nav">
+    <a class="nav-item" href="01-dashboard.html">Overview</a>
+    <a class="nav-item" href="#">Instances <span class="nb">8</span></a>
+    <a class="nav-item" href="02-agents.html">Agents</a>
+    <div class="nav-lbl">Developer</div>
+    <a class="nav-item active" href="#">API Keys</a>
+    <a class="nav-item" href="#">Docs</a>
+    <a class="nav-item" href="09-webhooks.html">Webhooks</a>
+    <div class="nav-lbl">Account</div>
+    <a class="nav-item" href="07-billing.html">Billing</a>
+    <a class="nav-item" href="#">Settings</a>
+  </div>
+  <div class="sf"><div class="av">AK</div><div><div style="font-size:12px;font-weight:500">Alexey K.</div><div style="font-size:11px;color:var(--text3)">Pro plan</div></div></div>
+</div>
+
+<div class="main">
+  <div class="topbar">
+    <span class="tb-title">API Keys</span>
+    <button class="btn btn-dark" onclick="open_modal('m-create')">
+      <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><line x1="5.5" y1="1" x2="5.5" y2="10" stroke="white" stroke-width="1.4"/><line x1="1" y1="5.5" x2="10" y2="5.5" stroke="white" stroke-width="1.4"/></svg>
+      New API key
+    </button>
+  </div>
+
+  <div class="content">
+
+    <!-- newly created banner (shown after create) -->
+    <div class="new-key-banner" id="new-key-banner" style="display:none">
+      <div class="nkb-title">🔑 Новый ключ создан — скопируйте сейчас</div>
+      <div class="nkb-sub">Ключ показывается только один раз. После закрытия его нельзя восстановить.</div>
+      <div class="nkb-key">
+        <span class="nkb-key-val" id="new-key-val">ms_live_aK9xR2qW…</span>
+        <button class="copy-btn" id="copy-btn" onclick="copyKey()">Копировать</button>
+      </div>
+      <button onclick="document.getElementById('new-key-banner').style.display='none'" style="position:absolute;top:10px;right:14px;background:transparent;border:none;cursor:pointer;color:var(--text3);font-size:18px">×</button>
+    </div>
+
+    <!-- stats -->
+    <div class="two-col">
+      <div class="stat-card">
+        <div class="sv">3</div>
+        <div class="sk">Активных ключей</div>
+        <div class="ss">из 10 разрешённых на Pro</div>
+      </div>
+      <div class="stat-card">
+        <div class="sv">14,832</div>
+        <div class="sk">Запросов сегодня</div>
+        <div class="ss">↑ 8% vs вчера · через все ключи</div>
+      </div>
+    </div>
+
+    <!-- key list -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div class="key-head">
+        <div class="kh">Ключ</div>
+        <div class="kh">Scope</div>
+        <div class="kh">Последнее использование</div>
+        <div class="kh">Запросов 24h</div>
+        <div class="kh"></div>
+      </div>
+
+      <!-- Key 1: full access, active -->
+      <div class="key-row" id="kr-1">
+        <div>
+          <div class="key-name">Production Backend</div>
+          <div class="key-val">
+            <span class="ks-active">Active</span>
+            <span style="margin-left:4px" id="kv-1">ms_live_aK9x…R2qW</span>
+            <button class="btn-xs" onclick="revealKey(1)" id="reveal-1" style="font-size:10px;padding:2px 6px">Показать</button>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Создан 01.03.2026 · Алексей К.</div>
+        </div>
+        <div>
+          <span class="scope-pill sp-full">full access</span>
+        </div>
+        <div style="font-size:12px;color:var(--text2)">2 мин назад<div style="font-size:10px;color:var(--text3)">POST /instances/{id}/ingest</div></div>
+        <div>
+          <div style="font-size:13px;font-weight:500">8,412</div>
+          <div class="ub-wrap"><div class="ub-fill" style="width:57%"></div></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">8.4K / 14.8K total</div>
+        </div>
+        <div class="key-actions">
+          <button class="btn-xs" onclick="open_modal('m-edit')">Edit</button>
+          <button class="btn-xs red" onclick="open_modal('m-revoke')">Revoke</button>
+        </div>
+      </div>
+
+      <!-- Key 2: read-only, active -->
+      <div class="key-row" id="kr-2">
+        <div>
+          <div class="key-name">Analytics Dashboard</div>
+          <div class="key-val">
+            <span class="ks-active">Active</span>
+            <span style="margin-left:4px" id="kv-2">ms_live_bT3p…X8mN</span>
+            <button class="btn-xs" onclick="revealKey(2)" id="reveal-2" style="font-size:10px;padding:2px 6px">Показать</button>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Создан 15.03.2026 · Алексей К.</div>
+        </div>
+        <div>
+          <span class="scope-pill sp-read">read only</span>
+        </div>
+        <div style="font-size:12px;color:var(--text2)">1 час назад<div style="font-size:10px;color:var(--text3)">GET /instances</div></div>
+        <div>
+          <div style="font-size:13px;font-weight:500">5,219</div>
+          <div class="ub-wrap"><div class="ub-fill" style="width:35%"></div></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">5.2K / 14.8K total</div>
+        </div>
+        <div class="key-actions">
+          <button class="btn-xs" onclick="open_modal('m-edit')">Edit</button>
+          <button class="btn-xs red" onclick="open_modal('m-revoke')">Revoke</button>
+        </div>
+      </div>
+
+      <!-- Key 3: instance-scoped, active -->
+      <div class="key-row" id="kr-3">
+        <div>
+          <div class="key-name">FAQ Bot Only</div>
+          <div class="key-val">
+            <span class="ks-active">Active</span>
+            <span style="margin-left:4px" id="kv-3">ms_live_cY7m…K1nZ</span>
+            <button class="btn-xs" onclick="revealKey(3)" id="reveal-3" style="font-size:10px;padding:2px 6px">Показать</button>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Создан 20.04.2026 · Алексей К.</div>
+        </div>
+        <div>
+          <span class="scope-pill sp-inst">inst: FAQ KB</span>
+        </div>
+        <div style="font-size:12px;color:var(--text2)">5 мин назад<div style="font-size:10px;color:var(--text3)">POST /instances/{id}/query</div></div>
+        <div>
+          <div style="font-size:13px;font-weight:500">1,201</div>
+          <div class="ub-wrap"><div class="ub-fill" style="width:8%"></div></div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">1.2K / 14.8K total</div>
+        </div>
+        <div class="key-actions">
+          <button class="btn-xs" onclick="open_modal('m-edit')">Edit</button>
+          <button class="btn-xs red" onclick="open_modal('m-revoke')">Revoke</button>
+        </div>
+      </div>
+
+      <!-- Key 4: revoked -->
+      <div class="key-row" style="opacity:.5">
+        <div>
+          <div class="key-name">Old Staging</div>
+          <div class="key-val">
+            <span class="ks-inactive">Revoked</span>
+            <span style="margin-left:4px">ms_live_dZ2q…P9vL</span>
+          </div>
+          <div style="font-size:10px;color:var(--text3);margin-top:2px">Создан 01.01.2026 · Отозван 01.04.2026</div>
+        </div>
+        <div><span class="scope-pill sp-full">full access</span></div>
+        <div style="font-size:12px;color:var(--text3)">30.03.2026</div>
+        <div style="font-size:12px;color:var(--text3)">—</div>
+        <div></div>
+      </div>
+    </div>
+
+    <!-- Recent API calls -->
+    <div class="card">
+      <div class="ct">Последние запросы <span style="font-size:11px;font-weight:400;color:var(--text3);text-transform:none;letter-spacing:0">Все ключи · последние 50</span></div>
+      <div class="log-tbl">
+        <div class="log-head" style="grid-template-columns:80px 100px 1fr 80px 70px 80px">
+          <div class="kh">Метод</div><div class="kh">Ключ</div><div class="kh">Endpoint</div><div class="kh">Статус</div><div class="kh">Токены</div><div class="kh">Время</div>
+        </div>
+        ${[
+          ['POST','Prod Backend','/instances/inst_abc/ingest','202','1,240','2 мин'],
+          ['GET','Analytics','/instances','200','—','2 мин'],
+          ['POST','FAQ Bot Only','/instances/inst_faq/query','200','380','5 мин'],
+          ['POST','Prod Backend','/instances/inst_wiki/ingest','202','2,100','8 мин'],
+          ['POST','FAQ Bot Only','/instances/inst_faq/query','200','290','12 мин'],
+          ['POST','Prod Backend','/instances/inst_abc/query','200','510','15 мин'],
+          ['GET','Analytics','/billing/usage','200','—','1ч'],
+          ['POST','Prod Backend','/instances/inst_abc/ingest','402','—','2ч'],
+        ].map(([method,key,ep,status,tok,time])=>`
+        <div class="log-row" style="grid-template-columns:80px 100px 1fr 80px 70px 80px">
+          <div class="lc"><span class="method-${method==='POST'?'post':method==='GET'?'get':'del'}">${method}</span></div>
+          <div class="lc" style="font-size:11px;color:var(--text3);font-family:var(--mono);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${key}</div>
+          <div class="lc" style="font-family:var(--mono);font-size:11px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${ep}</div>
+          <div class="lc"><span class="status-${status.startsWith('2')?'ok':'err'}">${status}</span></div>
+          <div class="lc" style="color:var(--text3)">${tok}</div>
+          <div class="lc" style="color:var(--text3)">${time}</div>
+        </div>`).join('')}
+      </div>
+    </div>
+
+    <!-- Docs hint -->
+    <div style="background:var(--bg);border:1px solid var(--border);border-radius:var(--rl);padding:14px 18px;display:flex;align-items:center;justify-content:space-between">
+      <div>
+        <div style="font-size:13px;font-weight:500;margin-bottom:3px">Аутентификация через заголовок</div>
+        <code style="font-size:11px;color:var(--text2);background:var(--bg2);padding:3px 8px;border-radius:4px;font-family:var(--mono)">Authorization: Bearer ms_live_&lt;key&gt;</code>
+      </div>
+      <button class="btn">Документация API →</button>
+    </div>
+
+  </div>
+</div>
+</div>
+
+<!-- Create key modal -->
+<div class="overlay" id="m-create">
+  <div class="modal">
+    <div class="modal-title">Создать API key</div>
+    <div class="modal-sub">Ключ будет показан только один раз после создания</div>
+    <div class="form-row">
+      <label class="form-label">Название ключа</label>
+      <input class="inp" placeholder="Например: Production Backend"/>
+      <div class="form-hint">Только для вашей навигации</div>
+    </div>
+    <div class="form-row">
+      <label class="form-label">Scope доступа</label>
+      <div class="scope-grid">
+        <div class="sc-item checked" onclick="toggleScope(this)">
+          <input type="checkbox" checked/>
+          <div><div class="sc-item-title">Full access</div><div class="sc-item-desc">Чтение + запись, все инстансы</div></div>
+        </div>
+        <div class="sc-item" onclick="toggleScope(this)">
+          <input type="checkbox"/>
+          <div><div class="sc-item-title">Read only</div><div class="sc-item-desc">Только GET запросы</div></div>
+        </div>
+        <div class="sc-item" onclick="toggleScope(this)">
+          <input type="checkbox"/>
+          <div><div class="sc-item-title">Ingest only</div><div class="sc-item-desc">Только загрузка данных</div></div>
+        </div>
+        <div class="sc-item" onclick="toggleScope(this)">
+          <input type="checkbox"/>
+          <div><div class="sc-item-title">Specific instance</div><div class="sc-item-desc">Только один инстанс</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-row" id="instance-select-row" style="display:none">
+      <label class="form-label">Выберите инстанс</label>
+      <select class="inp" style="cursor:pointer">
+        <option>FAQ Knowledge Base (RAG)</option>
+        <option>Product Wiki (Wiki)</option>
+        <option>Coach Bot History (Episodic)</option>
+        <option>Session Context (Working)</option>
+      </select>
+    </div>
+    <div class="form-row" style="margin-bottom:0">
+      <label class="form-label">IP allowlist <span style="font-size:11px;font-weight:400;color:var(--text3)">(необязательно)</span></label>
+      <input class="inp" placeholder="192.168.1.0/24, 10.0.0.1 — через запятую"/>
+      <div class="form-hint">Оставьте пустым, чтобы разрешить любые IP</div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="close_modal('m-create')">Отмена</button>
+      <button class="btn btn-dark" onclick="createKey()">Создать ключ</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit key modal -->
+<div class="overlay" id="m-edit">
+  <div class="modal">
+    <div class="modal-title">Редактировать ключ</div>
+    <div class="modal-sub">Production Backend</div>
+    <div class="form-row">
+      <label class="form-label">Название</label>
+      <input class="inp" value="Production Backend"/>
+    </div>
+    <div class="form-row" style="margin-bottom:0">
+      <label class="form-label">IP allowlist</label>
+      <input class="inp" placeholder="Пусто = любые IP"/>
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="close_modal('m-edit')">Отмена</button>
+      <button class="btn btn-dark">Сохранить</button>
+    </div>
+  </div>
+</div>
+
+<!-- Revoke modal -->
+<div class="overlay" id="m-revoke">
+  <div class="modal">
+    <div class="modal-title">Отозвать ключ?</div>
+    <div class="modal-sub">Production Backend · ms_live_aK9x…R2qW</div>
+    <div style="background:#faeeda;border-radius:var(--r);padding:12px 14px;font-size:12px;color:#412402;line-height:1.5">
+      После отзыва все запросы с этим ключом будут возвращать 401 Unauthorized. Действие необратимо.
+    </div>
+    <div class="modal-footer">
+      <button class="btn" onclick="close_modal('m-revoke')">Отмена</button>
+      <button class="btn" style="background:#a32d2d;color:#fff;border-color:#a32d2d">Отозвать ключ</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function open_modal(id){document.getElementById(id).classList.add('open')}
+function close_modal(id){document.getElementById(id).classList.remove('open')}
+document.querySelectorAll('.overlay').forEach(m=>m.addEventListener('click',e=>{if(e.target===m)m.classList.remove('open')}))
+
+function toggleScope(el){
+  el.classList.toggle('checked');
+  el.querySelector('input').checked=el.classList.contains('checked');
+  const instRow=document.getElementById('instance-select-row');
+  // show instance select if "Specific instance" is checked (4th)
+  const items=document.querySelectorAll('.sc-item');
+  if(items[3].classList.contains('checked'))instRow.style.display='block';
+  else instRow.style.display='none';
+}
+
+const fullKeys={
+  1:'ms_live_aK9xR2qWmT3pZ8vL1nY7dX',
+  2:'ms_live_bT3pX8mNqA7rS2wK5jH9cF',
+  3:'ms_live_cY7mK1nZpB4sT3xR6gD2wV',
+};
+function revealKey(id){
+  const el=document.getElementById('kv-'+id);
+  const btn=document.getElementById('reveal-'+id);
+  if(btn.textContent==='Показать'){
+    el.textContent=fullKeys[id];
+    btn.textContent='Скрыть';
+  } else {
+    el.textContent=`ms_live_${fullKeys[id].split('_live_')[1].slice(0,4)}…${fullKeys[id].slice(-4)}`;
+    btn.textContent='Показать';
+  }
+}
+
+function copyKey(){
+  const val=document.getElementById('new-key-val').textContent;
+  navigator.clipboard?.writeText(val).catch(()=>{});
+  const btn=document.getElementById('copy-btn');
+  btn.textContent='Скопировано!';
+  btn.classList.add('copied');
+  setTimeout(()=>{btn.textContent='Копировать';btn.classList.remove('copied')},2000);
+}
+
+function createKey(){
+  close_modal('m-create');
+  const chars='abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  const key='ms_live_'+Array.from({length:28},()=>chars[Math.floor(Math.random()*chars.length)]).join('');
+  document.getElementById('new-key-val').textContent=key;
+  document.getElementById('new-key-banner').style.display='block';
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,492 @@
+---
+description: Memory-as-a-Service — деплой, CI/CD, серверная инфраструктура
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# Деплой и инфраструктура
+
+## Git и GitHub
+
+### Репозиторий
+
+- Один моно-репо: `github.com/{username}/memory-service`
+- Ветки: `main` (production), `develop` (staging), `feat/*`, `fix/*`
+- Защита `main`: merge только через PR (настраивается в GitHub)
+- `.env` и секреты НИКОГДА не попадают в git
+
+### Первичная настройка репозитория
+
+```bash
+# Инициализация
+cd memory-service
+git init
+git add .
+git commit -m "feat: initial project structure (Phase 1)"
+git branch -M main
+git remote add origin git@github.com:{username}/memory-service.git
+git push -u origin main
+```
+
+### Коммиты
+
+Conventional commits на английском:
+```
+feat: add health endpoint
+fix: postgres connection pool timeout
+refactor: extract billing service
+docs: add API documentation
+chore: update dependencies
+deploy: production release v0.1.0
+```
+
+### .gitignore
+
+```gitignore
+# Environment
+.env
+.env.local
+.env.production
+
+# Go
+/backend/tmp/
+/backend/server
+
+# Node
+/frontend/node_modules/
+/frontend/.next/
+/frontend/out/
+
+# Docker
+docker-compose.override.yml
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# SSL
+nginx/ssl/*.pem
+nginx/ssl/*.key
+
+# WordPress uploads
+wordpress/uploads/
+
+# Logs
+*.log
+```
+
+---
+
+## Серверные требования
+
+### Минимум для MVP
+
+- **VPS:** 4 vCPU, 8 GB RAM, 80 GB SSD
+- **OS:** Ubuntu 24.04 LTS
+- **Docker:** 27+ с Docker Compose v2
+- **Домен:** mnemoniqa.com (или другой) с DNS A-записью на IP сервера
+- **Провайдеры (РФ):** Timeweb Cloud, Selectel, VDSina, Hetzner (EU)
+
+### Подготовка сервера
+
+```bash
+# 1. Обновить систему
+sudo apt update && sudo apt upgrade -y
+
+# 2. Установить Docker
+curl -fsSL https://get.docker.com | sh
+sudo usermod -aG docker $USER
+
+# 3. Установить Docker Compose (если не включён)
+sudo apt install docker-compose-plugin -y
+
+# 4. Установить make и git
+sudo apt install make git -y
+
+# 5. Настроить firewall
+sudo ufw allow 22/tcp    # SSH
+sudo ufw allow 80/tcp    # HTTP
+sudo ufw allow 443/tcp   # HTTPS
+sudo ufw enable
+
+# 6. Создать пользователя для деплоя (опционально)
+sudo adduser deploy
+sudo usermod -aG docker deploy
+sudo usermod -aG sudo deploy
+
+# 7. Настроить SSH ключ
+# На локальной машине:
+ssh-copy-id deploy@{server_ip}
+```
+
+---
+
+## Деплой
+
+### Первый деплой (ручной)
+
+```bash
+# На сервере:
+
+# 1. Склонировать репо
+cd /opt
+git clone git@github.com:{username}/memory-service.git
+cd memory-service
+
+# 2. Создать .env из примера и заполнить
+cp .env.example .env
+nano .env
+# ОБЯЗАТЕЛЬНО заполнить:
+# - POSTGRES_PASSWORD (сгенерировать: openssl rand -base64 32)
+# - WP_DB_PASSWORD (сгенерировать: openssl rand -base64 32)
+# - WP_DB_ROOT_PASSWORD (сгенерировать: openssl rand -base64 32)
+# - JWT_SECRET (сгенерировать: openssl rand -base64 64)
+# - API_KEY_SALT (сгенерировать: openssl rand -base64 32)
+# - OPENROUTER_API_KEY (из OpenRouter dashboard)
+# - ENVIRONMENT=production
+
+# 3. Получить SSL-сертификат (Let's Encrypt)
+# Сначала запустить без SSL чтобы certbot мог верифицировать домен
+make prod
+
+# Остановить и получить сертификат
+docker compose -f docker-compose.yml -f docker-compose.prod.yml down
+sudo apt install certbot -y
+sudo certbot certonly --standalone -d mnemoniqa.com -d www.mnemoniqa.com
+sudo cp /etc/letsencrypt/live/mnemoniqa.com/fullchain.pem nginx/ssl/
+sudo cp /etc/letsencrypt/live/mnemoniqa.com/privkey.pem nginx/ssl/
+
+# 4. Включить SSL в nginx конфиге
+# Раскомментировать SSL server block в nginx/conf.d/default.conf
+# Раскомментировать HTTP→HTTPS redirect
+
+# 5. Запустить production
+make prod
+
+# 6. Применить миграции
+make migrate
+
+# 7. Создать суперадмина
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec backend \
+  ./server --seed-admin --email=admin@mnemoniqa.com --password=CHANGE_ME
+
+# 8. Проверить
+curl https://mnemoniqa.com/health
+# {"status":"ok","version":"0.1.0"}
+```
+
+### Последующие деплои
+
+```bash
+# На сервере:
+cd /opt/memory-service
+git pull origin main
+make prod
+# Docker Compose пересоберёт только изменившиеся контейнеры
+
+# Если есть новые миграции:
+make migrate
+```
+
+### Скрипт деплоя (scripts/deploy.sh)
+
+```bash
+#!/bin/bash
+set -e
+
+# Настройки
+SERVER="deploy@{server_ip}"
+PROJECT_DIR="/opt/memory-service"
+BRANCH="${1:-main}"
+
+echo "=== Deploying branch: $BRANCH ==="
+
+# 1. Push локальные изменения
+git push origin $BRANCH
+
+# 2. Деплой на сервер
+ssh $SERVER << EOF
+  set -e
+  cd $PROJECT_DIR
+  
+  echo ">>> Pulling latest code..."
+  git fetch origin
+  git checkout $BRANCH
+  git pull origin $BRANCH
+  
+  echo ">>> Building and starting containers..."
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d
+  
+  echo ">>> Running migrations..."
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T backend \
+    goose -dir ./migrations postgres "\$DATABASE_URL" up
+  
+  echo ">>> Cleaning old images..."
+  docker image prune -f
+  
+  echo ">>> Health check..."
+  sleep 5
+  curl -sf https://mnemoniqa.com/health || echo "WARNING: Health check failed!"
+  
+  echo ">>> Done!"
+EOF
+
+echo "=== Deploy complete ==="
+```
+
+Использование:
+```bash
+chmod +x scripts/deploy.sh
+./scripts/deploy.sh          # деплоит main
+./scripts/deploy.sh develop  # деплоит develop
+```
+
+### Makefile (дополнение)
+
+```makefile
+# Деплой
+deploy:
+	./scripts/deploy.sh main
+
+deploy-dev:
+	./scripts/deploy.sh develop
+
+# SSL
+ssl-renew:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx certbot renew
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml exec nginx nginx -s reload
+
+# Бэкапы
+backup-db:
+	docker compose exec postgres pg_dump -U memoryservice memoryservice | gzip > backups/pg_$(shell date +%Y%m%d_%H%M%S).sql.gz
+
+backup-wp:
+	docker compose exec mysql mysqldump -u wordpress -p wordpress | gzip > backups/wp_$(shell date +%Y%m%d_%H%M%S).sql.gz
+
+# Логи production
+logs-prod:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f
+
+# Статус
+status:
+	docker compose -f docker-compose.yml -f docker-compose.prod.yml ps
+```
+
+---
+
+## SSL и домен
+
+### DNS записи
+
+```
+A     mnemoniqa.com      → {server_ip}
+A     www.mnemoniqa.com  → {server_ip}
+```
+
+### Auto-renewal SSL
+
+```bash
+# Cron для автопродления (на сервере)
+sudo crontab -e
+# Добавить:
+0 3 * * * certbot renew --quiet && cp /etc/letsencrypt/live/mnemoniqa.com/fullchain.pem /opt/memory-service/nginx/ssl/ && cp /etc/letsencrypt/live/mnemoniqa.com/privkey.pem /opt/memory-service/nginx/ssl/ && cd /opt/memory-service && docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T nginx nginx -s reload
+```
+
+### Nginx SSL конфигурация (production)
+
+В `nginx/conf.d/default.conf` добавляется SSL server block:
+
+```nginx
+# HTTP → HTTPS redirect (раскомментировать в production)
+server {
+    listen 80;
+    server_name mnemoniqa.com www.mnemoniqa.com;
+    
+    # Certbot challenge
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+    
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# HTTPS
+server {
+    listen 443 ssl http2;
+    server_name mnemoniqa.com www.mnemoniqa.com;
+    
+    ssl_certificate /etc/nginx/ssl/fullchain.pem;
+    ssl_certificate_key /etc/nginx/ssl/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+    add_header X-Frame-Options DENY always;
+    add_header X-Content-Type-Options nosniff always;
+    
+    # ... все location блоки (api, dashboard, wordpress, mcp) ...
+}
+```
+
+---
+
+## Бэкапы
+
+### Автоматические бэкапы (cron на сервере)
+
+```bash
+# /opt/memory-service/scripts/backup.sh
+#!/bin/bash
+set -e
+
+BACKUP_DIR="/opt/memory-service/backups"
+DATE=$(date +%Y%m%d_%H%M%S)
+RETENTION_DAYS=30
+
+mkdir -p $BACKUP_DIR
+
+# PostgreSQL
+docker compose -f /opt/memory-service/docker-compose.yml \
+  -f /opt/memory-service/docker-compose.prod.yml \
+  exec -T postgres pg_dump -U memoryservice memoryservice \
+  | gzip > $BACKUP_DIR/pg_$DATE.sql.gz
+
+# MySQL (WordPress)
+docker compose -f /opt/memory-service/docker-compose.yml \
+  -f /opt/memory-service/docker-compose.prod.yml \
+  exec -T mysql mysqldump -u wordpress -p$WP_DB_PASSWORD wordpress \
+  | gzip > $BACKUP_DIR/wp_$DATE.sql.gz
+
+# Удалить старые бэкапы
+find $BACKUP_DIR -type f -mtime +$RETENTION_DAYS -delete
+
+echo "Backup completed: $DATE"
+```
+
+```bash
+# Cron: ежедневно в 4:00
+sudo crontab -e
+0 4 * * * /opt/memory-service/scripts/backup.sh >> /var/log/memory-service-backup.log 2>&1
+```
+
+### .gitignore дополнение
+
+```gitignore
+backups/
+```
+
+---
+
+## Мониторинг (минимум для MVP)
+
+### Health endpoint расширенный
+
+`GET /health` для внешнего мониторинга:
+
+```json
+{
+  "status": "ok",
+  "version": "0.1.0",
+  "uptime_seconds": 86400,
+  "postgres": "ok",
+  "workers": {
+    "queue_length": 3,
+    "errors_24h": 0
+  }
+}
+```
+
+### Простой мониторинг через UptimeRobot / Hetrixtools
+
+- Проверка `https://mnemoniqa.com/health` каждые 5 минут
+- Уведомление в Telegram при даунтайме
+- Бесплатно для базового мониторинга
+
+### Логи
+
+```bash
+# Смотреть логи в реальном времени
+make logs-prod
+
+# Логи конкретного сервиса
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f backend
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs -f nginx
+
+# Найти ошибки за последний час
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs --since 1h backend | grep ERROR
+```
+
+---
+
+## Команды которые Cursor может выполнять
+
+Cursor может генерировать команды для:
+
+### Git и GitHub
+
+```bash
+# Инициализация и push
+git init && git add . && git commit -m "feat: initial structure" && git branch -M main
+git remote add origin git@github.com:{username}/memory-service.git
+git push -u origin main
+
+# Новая фича
+git checkout -b feat/auth
+# ... изменения ...
+git add . && git commit -m "feat: add JWT auth and API keys"
+git push origin feat/auth
+# Merge через GitHub PR или:
+git checkout main && git merge feat/auth && git push origin main
+```
+
+### Деплой
+
+```bash
+# Первый деплой
+ssh deploy@{server_ip} "cd /opt && git clone git@github.com:{username}/memory-service.git"
+scp .env deploy@{server_ip}:/opt/memory-service/.env
+ssh deploy@{server_ip} "cd /opt/memory-service && make prod && make migrate"
+
+# Обновление
+./scripts/deploy.sh
+```
+
+### Troubleshooting
+
+```bash
+# Перезапуск конкретного сервиса
+ssh deploy@{server_ip} "cd /opt/memory-service && docker compose -f docker-compose.yml -f docker-compose.prod.yml restart backend"
+
+# Пересборка одного сервиса
+ssh deploy@{server_ip} "cd /opt/memory-service && docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d backend"
+
+# Зайти в контейнер
+ssh deploy@{server_ip} "cd /opt/memory-service && docker compose exec backend sh"
+
+# Посмотреть использование ресурсов
+ssh deploy@{server_ip} "docker stats --no-stream"
+```
+
+---
+
+## Правила деплоя
+
+1. **Деплой ТОЛЬКО из ветки `main`.** Develop — для staging.
+2. **Перед деплоем — `git pull` на сервере, НЕ копирование файлов.**
+3. **`.env` создаётся вручную на сервере, НЕ пушится в git.**
+4. **Миграции запускаются ПОСЛЕ старта контейнеров.**
+5. **SSL сертификаты хранятся на сервере в `nginx/ssl/`, НЕ в git.**
+6. **Бэкапы БД — ежедневно, хранятся 30 дней.**
+7. **Суперадмин создаётся через CLI seed-команду, НЕ через регистрацию.**
+8. **После деплоя — проверить `/health` endpoint.**
+9. **Логи Docker — json-file driver, max 10MB × 3 файла** (настроено в docker-compose.prod.yml).
+10. **Домен: DNS A-запись должна указывать на IP сервера ДО первого деплоя.**

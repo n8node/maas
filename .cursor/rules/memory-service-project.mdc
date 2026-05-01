@@ -1,0 +1,899 @@
+---
+description: Memory-as-a-Service — полное описание проекта, продукта и бизнес-логики
+globs: ["**/*"]
+alwaysApply: true
+---
+
+# MemoryService — полное описание проекта
+
+## Миссия
+
+MemoryService — облачная платформа, предоставляющая разработчикам AI-агентов готовые типы памяти
+через единый REST API. Разработчик не строит RAG-пайплайн, wiki-компиляцию или граф знаний
+с нуля — он создаёт инстанс нужного типа памяти в два клика и подключается по API-ключу.
+
+Аналогия: Stripe для платежей, Twilio для SMS, **MemoryService для памяти агентов.**
+
+---
+
+## Целевая аудитория
+
+### Первичная (B2D — Business to Developer)
+
+- **Инди-разработчики AI-агентов** — строят ботов, ассистентов, автоматизации. Не хотят разбираться
+  в pgvector, чанкинге, графовых БД. Хотят `POST /ingest` + `POST /query` и чтобы работало.
+- **Стартапы с AI-продуктом** — нужна надёжная память для агента, но нет ресурсов строить
+  инфраструктуру. Хотят сосредоточиться на продукте, а не на инженерии памяти.
+- **Агентства и студии разработки** — делают AI-решения для клиентов. Нужен переиспользуемый
+  backend для памяти, который можно подключить к любому проекту.
+
+### Вторичная
+
+- **Корпоративные команды** — внутренние AI-инструменты, knowledge management, автоматизация
+  документации. Нужны SLA, изоляция данных, аудит.
+
+---
+
+## Пользовательские роли
+
+### 1. Суперадмин (владелец платформы — ты)
+
+Полный контроль над платформой. Доступ через `/admin`.
+
+**Возможности:**
+- Управление пользователями: просмотр, блокировка, разблокировка, удаление, смена тарифа вручную, сброс пароля, impersonate (войти под пользователем)
+- Управление тарифами: создание, редактирование, архивирование тарифных планов. Настройка лимитов (инстансы, токены, типы памяти, gardener runs, storage)
+- Управление пакетами токенов: создание, редактирование пакетов для докупки
+- Финансовая аналитика: MRR, churn, LTV, ARPU, конверсия free→paid, динамика по дням/неделям/месяцам
+- Статистика по пользователям: кто сколько потребил токенов, по каким моделям, по каким типам памяти, сколько инстансов, когда последний раз был активен
+- Статистика по платформе: общее количество инстансов, токенов, запросов, ingest-операций, средняя стоимость запроса, топ моделей по потреблению
+- Операционный мониторинг: очереди воркеров (длина, задержка, ошибки), здоровье БД, OpenRouter баланс и rate limits
+- Управление промокодами и скидками
+- Системные настройки: дефолтные модели, лимиты rate limiting, maintenance window
+- Логи: просмотр action_log и usage_log любого пользователя
+- Уведомления: отправка системных уведомлений пользователям (maintenance, изменения тарифов)
+
+### 2. Пользователь (разработчик)
+
+Создаёт и управляет инстансами памяти. Доступ через `/dashboard`.
+
+**Возможности:**
+- Регистрация / логин (email + пароль, в будущем OAuth GitHub/Google)
+- Личный кабинет с обзором: количество инстансов, потребление токенов за текущий период, остаток, текущий тариф
+- Управление инстансами памяти:
+  - Создание инстанса: выбор типа, имя, конфигурация (модели, параметры)
+  - Просмотр деталей инстанса: метрики здоровья, статистика использования, action log
+  - Настройки инстанса: смена моделей, параметров, расписания gardener
+  - Playground: интерактивное тестирование ingest/query прямо в браузере
+  - Удаление инстанса
+- API-ключи: генерация, просмотр (маскированные), отзыв, именование
+- Биллинг:
+  - Просмотр текущего тарифа и его лимитов
+  - Смена тарифа (апгрейд/даунгрейд)
+  - Докупка токенов (пакетами)
+  - История платежей
+  - Детализация потребления: по инстансам, по операциям, по моделям, по дням
+- Документация API: встроенная, с примерами кода на Python/JS/curl
+- Настройки профиля: email, пароль, timezone
+
+---
+
+## Биллинг и тарификация
+
+### Модель: подписка + потребление
+
+Пользователь платит **ежемесячную подписку** (тариф) которая даёт базовые лимиты,
+и может **докупать токены** пакетами когда лимиты подписки исчерпаны.
+
+### Тарифные планы (управляются суперадмином)
+
+Каждый тарифный план определяет:
+
+```go
+type Plan struct {
+    ID                string    `json:"id"`
+    Name              string    `json:"name"`              // "Free", "Starter", "Pro", "Business"
+    Slug              string    `json:"slug"`              // "free", "starter", "pro", "business"
+    PriceMonthlyRUB   int       `json:"price_monthly_rub"` // Цена в рублях/месяц
+    PriceYearlyRUB    int       `json:"price_yearly_rub"`  // Цена в рублях/год (скидка)
+    
+    // Лимиты
+    MaxInstances      int       `json:"max_instances"`      // Максимум инстансов
+    MonthlyTokens     int64     `json:"monthly_tokens"`     // Включённые токены/месяц
+    MaxStorageMB      int64     `json:"max_storage_mb"`     // Максимум хранилища
+    
+    // Доступные типы памяти
+    AllowedMemoryTypes []string `json:"allowed_memory_types"` // ["rag"] для free, все для pro
+    
+    // Доступные фичи
+    GardenerEnabled    bool     `json:"gardener_enabled"`    // Автоматический gardener
+    ReflectiveEnabled  bool     `json:"reflective_enabled"`  // Reflective тип
+    BiTemporalEnabled  bool     `json:"bi_temporal_enabled"` // Bi-temporal запросы
+    CustomModels       bool     `json:"custom_models"`       // Выбор моделей OpenRouter
+    PriorityWorkers    bool     `json:"priority_workers"`    // Приоритет в очереди воркеров
+    
+    // Поддержка
+    SupportLevel       string   `json:"support_level"`       // "community", "email", "priority"
+    
+    // Мета
+    IsPublic           bool     `json:"is_public"`           // Видимость на странице pricing
+    IsArchived         bool     `json:"is_archived"`         // Архивный (нельзя подключить, но текущие работают)
+    SortOrder          int      `json:"sort_order"`
+    CreatedAt          time.Time
+    UpdatedAt          time.Time
+}
+```
+
+Примерная тарифная сетка (суперадмин настраивает):
+
+| | Free | Starter | Pro | Business |
+|---|---|---|---|---|
+| Цена | 0 ₽ | 990 ₽/мес | 2 990 ₽/мес | 9 990 ₽/мес |
+| Инстансы | 2 | 10 | 50 | Безлимит |
+| Токены/мес | 100K | 1M | 10M | 50M |
+| Хранилище | 100 МБ | 1 ГБ | 10 ГБ | 100 ГБ |
+| Типы памяти | RAG | RAG, Wiki, Episodic, Working | Все 6 | Все 6 |
+| Gardener | — | — | Авто | Авто |
+| Reflective | — | — | Да | Да |
+| Модели | Дефолт | Дефолт | Выбор | Выбор |
+| Поддержка | Community | Email | Priority | Priority |
+
+### Пакеты токенов (докупка)
+
+Когда месячный лимит исчерпан, пользователь может докупить токены пакетами:
+
+```go
+type TokenPackage struct {
+    ID          string `json:"id"`
+    Name        string `json:"name"`          // "100K", "1M", "5M", "10M"
+    Tokens      int64  `json:"tokens"`        // Количество токенов
+    PriceRUB    int    `json:"price_rub"`     // Цена пакета
+    IsActive    bool   `json:"is_active"`
+    SortOrder   int    `json:"sort_order"`
+}
+```
+
+Примерные пакеты:
+
+| Пакет | Токены | Цена |
+|-------|--------|------|
+| Мини | 500K | 290 ₽ |
+| Стандарт | 2M | 990 ₽ |
+| Про | 10M | 3 990 ₽ |
+| Макс | 50M | 14 990 ₽ |
+
+### Логика потребления
+
+1. Каждый LLM-вызов записывается в `usage_log` с количеством input/output токенов и моделью
+2. Каждый embedding-вызов аналогично
+3. Система подсчитывает общее потребление за текущий биллинговый период
+4. Порядок списания: сначала токены подписки → затем купленные пакеты (FIFO)
+5. Когда все токены исчерпаны: API возвращает `402 Payment Required` с `error.code = "TOKENS_EXHAUSTED"`
+6. Пользователь может настроить порог уведомления (например, 80% использования)
+
+```go
+type UserBalance struct {
+    UserID              string
+    PlanID              string
+    PlanTokensRemaining int64     // Остаток от подписки
+    PurchasedTokens     int64     // Остаток от купленных пакетов
+    BillingPeriodStart  time.Time
+    BillingPeriodEnd    time.Time
+    NotifyThreshold     float64   // 0.8 = уведомить при 80% использования
+}
+
+// Функция списания
+func (b *BillingService) ConsumeTokens(userID string, amount int64) error {
+    // 1. Списать из plan tokens
+    // 2. Если не хватает — из purchased tokens (FIFO по дате покупки)
+    // 3. Если всё исчерпано — вернуть ErrTokensExhausted
+}
+```
+
+### Оплата
+
+MVP: ручная оплата (выставление счёта, перевод на карту/расчётный счёт).
+Следующий этап: интеграция с ЮKassa / CloudPayments / Тинькофф.
+
+```go
+type Payment struct {
+    ID            string
+    UserID        string
+    Type          string    // "subscription", "token_package"
+    Amount        int       // Сумма в копейках
+    Currency      string    // "RUB"
+    Status        string    // "pending", "completed", "failed", "refunded"
+    PlanID        *string   // Для подписки
+    PackageID     *string   // Для пакета токенов
+    ExternalID    *string   // ID в платёжной системе
+    CreatedAt     time.Time
+    CompletedAt   *time.Time
+}
+```
+
+---
+
+## Суперадминка — функциональность
+
+### Доступ
+
+- URL: `/admin`
+- Отдельный Next.js layout внутри того же приложения (route group `(admin)`)
+- Аутентификация: тот же JWT, но с `role: "superadmin"` в claims
+- Middleware проверяет роль на каждом admin-роуте
+- Суперадмин создаётся через CLI-команду или seed-скрипт, НЕ через публичную регистрацию
+
+### Страницы суперадминки
+
+```
+/admin                          — Дашборд (обзор платформы)
+/admin/users                    — Список пользователей
+/admin/users/:id                — Детали пользователя (профиль, инстансы, потребление, платежи)
+/admin/users/:id/impersonate    — Войти под пользователем
+/admin/plans                    — Управление тарифами
+/admin/plans/new                — Создание тарифа
+/admin/plans/:id                — Редактирование тарифа
+/admin/packages                 — Управление пакетами токенов
+/admin/packages/new             — Создание пакета
+/admin/packages/:id             — Редактирование пакета
+/admin/payments                 — Все платежи (фильтры по статусу, периоду, пользователю)
+/admin/analytics                — Финансовая аналитика (MRR, churn, LTV, ARPU, графики)
+/admin/analytics/usage          — Потребление: топ пользователей, топ моделей, тренды
+/admin/instances                — Все инстансы (фильтры по типу, статусу, пользователю)
+/admin/instances/:id            — Детали инстанса (метрики, action_log, usage)
+/admin/promocodes               — Промокоды
+/admin/promocodes/new           — Создание промокода
+/admin/notifications            — Отправка уведомлений пользователям
+/admin/workers                  — Мониторинг воркеров (очереди, задержки, ошибки)
+/admin/settings                 — Системные настройки (дефолтные модели, rate limits)
+/admin/logs                     — Системные логи (usage_log, action_log, errors)
+```
+
+### Дашборд суперадмина (`/admin`)
+
+Карточки с ключевыми метриками:
+
+**Финансы:**
+- MRR (Monthly Recurring Revenue) текущий и тренд
+- Количество платящих пользователей
+- Средний чек (ARPU)
+- Доход за текущий месяц (подписки + пакеты)
+- Задолженности / failed payments
+
+**Пользователи:**
+- Всего зарегистрированных
+- Активных за 24ч / 7д / 30д
+- Новых за неделю
+- Конверсия free → paid (%)
+- Churn за месяц (%)
+
+**Потребление:**
+- Токены за текущий месяц (input + output)
+- Стоимость OpenRouter за месяц (расходы платформы)
+- Маржинальность (доход от токенов − расход на OpenRouter)
+- Топ-3 модели по потреблению
+- Топ-3 пользователя по потреблению
+
+**Операции:**
+- Всего инстансов (по типам)
+- Ingest-операций за 24ч
+- Query-операций за 24ч
+- Ошибки воркеров за 24ч
+- Длина очередей воркеров
+
+### Управление пользователями (`/admin/users`)
+
+Таблица:
+| Email | Тариф | Инстансов | Токены (использ./лимит) | Последняя активность | Статус | Действия |
+|-------|-------|-----------|------------------------|---------------------|--------|----------|
+
+Фильтры: по тарифу, по статусу (active/blocked), по дате регистрации, по потреблению.
+Поиск: по email, по ID.
+Сортировка: по дате, по потреблению, по количеству инстансов.
+
+Действия над пользователем:
+- Заблокировать / разблокировать
+- Сменить тариф вручную
+- Начислить бонусные токены
+- Сбросить пароль (отправить ссылку на email)
+- Impersonate (войти под пользователем — видишь его дашборд)
+- Удалить (soft delete, данные сохраняются 30 дней)
+
+Страница деталей пользователя (`/admin/users/:id`):
+- Профиль: email, дата регистрации, тариф, баланс
+- Инстансы: список с типами и метриками
+- Потребление: график по дням, разбивка по моделям и операциям
+- Платежи: история, статусы
+- Action log: все когнитивные операции во всех инстансах (фильтруемый)
+- API-ключи: список (маскированные), даты создания, последнего использования
+
+### Управление тарифами (`/admin/plans`)
+
+Форма создания/редактирования тарифа содержит все поля из `Plan` struct.
+Архивирование тарифа: тариф скрывается из публичного списка, но текущие подписчики продолжают работать.
+Нельзя удалить тариф, на котором есть активные пользователи — только архивировать.
+При изменении тарифа: существующие пользователи НЕ затрагиваются до следующего биллингового периода.
+
+### Финансовая аналитика (`/admin/analytics`)
+
+Графики:
+- MRR по месяцам (линейный)
+- Доход: подписки vs пакеты (stacked bar)
+- Пользователи по тарифам (pie)
+- Конверсия по этапам воронки (funnel): регистрация → создание инстанса → первый ingest → первый query → оплата
+- Маржинальность: доход от пользователей − расход на OpenRouter (линейный по месяцам)
+- Churn по месяцам
+
+Таблицы:
+- Топ-20 пользователей по потреблению за месяц
+- Топ-20 пользователей по доходу
+- Распределение потребления по моделям
+- Распределение потребления по типам памяти
+- Средняя стоимость одного ingest/query по типам
+
+---
+
+## Личный кабинет пользователя — функциональность
+
+### Страницы
+
+```
+/dashboard                      — Обзор (инстансы, потребление, баланс)
+/dashboard/instances            — Список инстансов
+/dashboard/instances/new        — Создание инстанса
+/dashboard/instances/:id        — Детали инстанса
+/dashboard/instances/:id/health — Метрики качества памяти
+/dashboard/instances/:id/concepts — Граф концептов (Wiki/Graph/Reflective)
+/dashboard/instances/:id/playground — Тестирование API
+/dashboard/instances/:id/settings — Настройки инстанса
+/dashboard/billing              — Тариф, баланс, история
+/dashboard/billing/upgrade      — Смена тарифа
+/dashboard/billing/tokens       — Докупка токенов
+/dashboard/api-keys             — Управление API-ключами
+/dashboard/docs                 — API-документация
+/dashboard/docs/[...slug]       — Разделы документации
+/dashboard/settings             — Профиль (email, пароль, timezone)
+```
+
+### Дашборд обзор (`/dashboard`)
+
+Карточки:
+- Текущий тариф (название, кнопка «Улучшить»)
+- Токены: использовано / лимит, прогресс-бар, кнопка «Докупить»
+- Активных инстансов / максимум по тарифу
+- Хранилище: использовано / лимит
+
+Список последних инстансов (до 5 штук) с мини-статистикой:
+| Имя | Тип | Concepts/Docs | Queries за 24ч | Health |
+|-----|-----|---------------|----------------|--------|
+
+Если нет инстансов — onboarding: «Создайте первый инстанс памяти за 30 секунд».
+
+### Создание инстанса (`/dashboard/instances/new`)
+
+Пошаговая форма:
+
+**Шаг 1 — Тип памяти:**
+Карточки (radio) с иконками и кратким описанием каждого типа.
+Если тип недоступен на текущем тарифе — карточка задизейблена с пометкой «Доступно на Pro».
+
+**Шаг 2 — Настройки:**
+- Имя инстанса
+- Модели (если тариф позволяет выбор): extraction, compilation, embedding
+- Специфичные параметры:
+  - RAG: chunk_size, chunk_overlap, иерархическая кластеризация (вкл/выкл)
+  - Wiki: concept_types (чекбоксы), auto_gardener (вкл/выкл), gardener_schedule
+  - Episodic: decay_rate, bi_temporal (вкл/выкл)
+  - Working: default_ttl
+  - Graph: relation_types (чекбоксы)
+  - Reflective: reaction_states (чекбоксы), pattern_min_episodes
+
+**Шаг 3 — Подтверждение:**
+Сводка настроек, оценка потребления токенов.
+Кнопка «Создать».
+
+### Детали инстанса (`/dashboard/instances/:id`)
+
+Вкладки или секции:
+
+**Обзор:**
+- Тип, статус, дата создания
+- Статистика: documents/concepts/episodes count, queries за 24ч/7д/30д
+- Потребление токенов за текущий месяц (input + output, по операциям)
+- Для Wiki/Graph/Reflective: health метрики (coverage, purity, stale_ratio)
+
+**Playground:**
+- Поле для загрузки текста (ingest) — textarea или drag-and-drop файл
+- Поле для запроса (query) — с ответом, citations, confidence
+- Для Wiki: список concepts с поиском, просмотр отдельного concept с evidence
+- Для Graph: визуализация подграфа (простая, на D3 или аналоге)
+- Для Reflective: список reactions, patterns, tensions
+
+**Документы/Источники:**
+- Таблица загруженных документов с датой, размером, статусом обработки
+- Возможность удалить документ (каскадно удаляет связанные chunks/mentions)
+
+**Action Log:**
+- Хронологический список когнитивных операций: create/attach/refine/reject/merge/split
+- Фильтры по actor, action, concept
+- Каждая запись: actor, action, target concept, rationale, timestamp
+
+**Gardener (только Wiki/Graph):**
+- Список proposals: тип (merge/split/noise), кандидаты, статус
+- Кнопки approve/reject для каждого proposal
+- Repair queue: концепты, требующие внимания
+- Кнопка «Запустить triage вручную»
+
+**Настройки:**
+- Смена моделей, параметров
+- Пауза/возобновление инстанса
+- Удаление инстанса (с подтверждением)
+
+### Биллинг (`/dashboard/billing`)
+
+**Текущий тариф:**
+- Название, цена, список лимитов
+- Использование за текущий период (прогресс-бары)
+- Дата следующего списания
+- Кнопки: «Улучшить тариф», «Отменить подписку»
+
+**Докупка токенов:**
+- Карточки пакетов с ценами
+- Текущий остаток купленных токенов
+- Кнопка «Купить» → переход к оплате
+
+**История платежей:**
+- Таблица: дата, тип (подписка/пакет), сумма, статус
+- Скачать квитанцию (PDF)
+
+**Детализация потребления:**
+- Фильтры: период, инстанс, тип операции
+- Таблица: дата, инстанс, операция, модель, tokens_in, tokens_out, стоимость
+- Сводка: итого за период, средняя стоимость query/ingest
+
+### Управление API-ключами (`/dashboard/api-keys`)
+
+- Таблица: имя ключа, префикс (первые 8 символов), дата создания, дата последнего использования
+- Кнопка «Создать новый ключ» → модалка с именем → показать ключ ОДИН раз (дальше только префикс)
+- Кнопка «Отозвать» для каждого ключа (с подтверждением)
+- Лимит: до 10 ключей на пользователя
+
+### Документация API (`/dashboard/docs`)
+
+Встроенная интерактивная документация:
+
+- Обзор: как начать, базовые концепции
+- Аутентификация: формат ключа, заголовок
+- Типы памяти: описание каждого типа с use-case
+- Endpoints: все endpoints с описанием, параметрами, примерами на Python/JS/curl
+- Примеры интеграции: Python SDK (будущее), n8n, LangChain, LlamaIndex
+- Ошибки: таблица кодов ошибок с описаниями
+- Rate limits: лимиты по тарифам
+
+Формат: MDX-страницы, рендерятся через Next.js.
+
+---
+
+## Публичный сайт (WordPress)
+
+### Страницы
+
+```
+/                   — Лендинг (hero, features, use-cases, CTA)
+/pricing            — Тарифы (карточки планов, сравнительная таблица, FAQ)
+/blog               — Блог (SEO, контент-маркетинг)
+/blog/:slug         — Статья
+/docs               — Редирект на /dashboard/docs (или публичная версия без авторизации)
+/about              — О проекте
+/contact            — Контакты
+/terms              — Условия использования
+/privacy            — Политика конфиденциальности
+```
+
+### Лендинг (/)
+
+Секции:
+1. **Hero:** заголовок + подзаголовок + CTA «Попробовать бесплатно» + пример кода (curl)
+2. **Типы памяти:** 6 карточек с иконками и кратким описанием
+3. **Как это работает:** 3 шага (создай инстанс → загрузи данные → подключи к агенту)
+4. **Use-cases:** саппорт-бот, исследовательский ассистент, коуч, проектная документация
+5. **Pricing preview:** 3-4 тарифа с кнопками
+6. **API пример:** сниппет кода (Python)
+7. **Footer:** ссылки, контакты
+
+---
+
+## Уведомления
+
+### Email-уведомления пользователю
+
+- Регистрация: welcome email
+- Подтверждение email
+- Сброс пароля
+- Подписка оформлена / продлена / отменена
+- Платёж успешен / не прошёл
+- Токены: 80% использования → предупреждение
+- Токены: 100% использования → уведомление + предложение докупить
+- Gardener: proposals готовы к review (если auto_gardener)
+- Системные: maintenance, изменения условий
+
+### In-app уведомления
+
+- Баннер в дашборде при приближении к лимиту токенов
+- Баннер при наличии unreviewed gardener proposals
+- Баннер при наличии repair queue items
+
+### Уведомления суперадмину
+
+- Новый платящий пользователь
+- Failed payment
+- Пользователь отменил подписку (churn alert)
+- OpenRouter: приближение к rate limit или низкий баланс
+- Ошибки воркеров превышают порог
+- Суточный digest: MRR, новые пользователи, потребление
+
+---
+
+## Безопасность и изоляция
+
+- Каждый пользователь видит ТОЛЬКО свои инстансы. SQL-запросы ВСЕГДА фильтруют по user_id.
+- API-ключи привязаны к user_id. Через ключ нельзя получить доступ к чужим данным.
+- Суперадмин может видеть данные любого пользователя, но это логируется.
+- Impersonate: суперадмин входит в сессию пользователя, все действия логируются как `actor: "admin_impersonate:<admin_id>"`.
+- Reflective данные: изолированы от основного графа, доступ через отдельный флаг, retention/purge политики.
+- Soft delete для пользователей: данные хранятся 30 дней, затем hard delete cron-job.
+- Все действия суперадмина логируются в отдельный `admin_audit_log`.
+
+---
+
+## Дополнительные таблицы БД (к основным из rules файла)
+
+```sql
+-- Тарифные планы
+CREATE TABLE plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    slug TEXT UNIQUE NOT NULL,
+    price_monthly_rub INT NOT NULL DEFAULT 0,
+    price_yearly_rub INT NOT NULL DEFAULT 0,
+    max_instances INT NOT NULL DEFAULT 2,
+    monthly_tokens BIGINT NOT NULL DEFAULT 100000,
+    max_storage_mb BIGINT NOT NULL DEFAULT 100,
+    allowed_memory_types TEXT[] NOT NULL DEFAULT '{rag}',
+    gardener_enabled BOOLEAN DEFAULT false,
+    reflective_enabled BOOLEAN DEFAULT false,
+    bi_temporal_enabled BOOLEAN DEFAULT false,
+    custom_models BOOLEAN DEFAULT false,
+    priority_workers BOOLEAN DEFAULT false,
+    support_level TEXT DEFAULT 'community',
+    is_public BOOLEAN DEFAULT true,
+    is_archived BOOLEAN DEFAULT false,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Пакеты токенов
+CREATE TABLE token_packages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    name TEXT NOT NULL,
+    tokens BIGINT NOT NULL,
+    price_rub INT NOT NULL,
+    is_active BOOLEAN DEFAULT true,
+    sort_order INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Подписки пользователей
+CREATE TABLE subscriptions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    plan_id UUID REFERENCES plans(id),
+    status TEXT DEFAULT 'active' CHECK (status IN ('active', 'canceled', 'past_due', 'paused')),
+    current_period_start TIMESTAMPTZ NOT NULL,
+    current_period_end TIMESTAMPTZ NOT NULL,
+    cancel_at_period_end BOOLEAN DEFAULT false,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Баланс токенов
+CREATE TABLE token_balances (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    source TEXT NOT NULL CHECK (source IN ('plan', 'purchase', 'bonus', 'promo')),
+    source_id UUID,                    -- plan_id, package purchase id, promo_id
+    tokens_total BIGINT NOT NULL,
+    tokens_used BIGINT DEFAULT 0,
+    expires_at TIMESTAMPTZ,            -- plan tokens expire at period end
+    created_at TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT positive_balance CHECK (tokens_used <= tokens_total)
+);
+
+CREATE INDEX token_balances_user_idx ON token_balances(user_id, created_at);
+
+-- Платежи
+CREATE TABLE payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id),
+    type TEXT NOT NULL CHECK (type IN ('subscription', 'token_package')),
+    amount_kopecks INT NOT NULL,       -- Сумма в копейках
+    currency TEXT DEFAULT 'RUB',
+    status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'completed', 'failed', 'refunded')),
+    plan_id UUID REFERENCES plans(id),
+    package_id UUID REFERENCES token_packages(id),
+    external_id TEXT,                  -- ID в платёжной системе
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now(),
+    completed_at TIMESTAMPTZ
+);
+
+-- Промокоды
+CREATE TABLE promocodes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT UNIQUE NOT NULL,
+    type TEXT NOT NULL CHECK (type IN ('discount_percent', 'discount_fixed', 'bonus_tokens', 'trial_days')),
+    value INT NOT NULL,                -- процент, рубли, токены или дни
+    max_uses INT,                      -- NULL = безлимитно
+    current_uses INT DEFAULT 0,
+    valid_from TIMESTAMPTZ DEFAULT now(),
+    valid_until TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE promocode_uses (
+    id BIGSERIAL PRIMARY KEY,
+    promocode_id UUID REFERENCES promocodes(id),
+    user_id UUID REFERENCES users(id),
+    applied_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Аудит-лог суперадмина
+CREATE TABLE admin_audit_log (
+    id BIGSERIAL PRIMARY KEY,
+    admin_user_id UUID REFERENCES users(id),
+    action TEXT NOT NULL,               -- 'block_user', 'change_plan', 'impersonate', 'grant_tokens', etc.
+    target_user_id UUID,
+    details JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Системные уведомления
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES users(id) ON DELETE CASCADE,
+    type TEXT NOT NULL,                 -- 'token_warning', 'token_exhausted', 'payment_failed', 'gardener_proposals', 'system'
+    title TEXT NOT NULL,
+    message TEXT NOT NULL,
+    is_read BOOLEAN DEFAULT false,
+    metadata JSONB DEFAULT '{}',
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX notifications_user_unread_idx ON notifications(user_id, is_read)
+    WHERE is_read = false;
+
+-- Роль пользователя
+ALTER TABLE users ADD COLUMN role TEXT DEFAULT 'user' CHECK (role IN ('user', 'superadmin'));
+ALTER TABLE users ADD COLUMN status TEXT DEFAULT 'active' CHECK (status IN ('active', 'blocked', 'deleted'));
+ALTER TABLE users ADD COLUMN timezone TEXT DEFAULT 'Europe/Moscow';
+ALTER TABLE users ADD COLUMN deleted_at TIMESTAMPTZ;  -- soft delete
+```
+
+---
+
+## API Endpoints — дополнение для биллинга и админки
+
+```
+# === Биллинг (для пользователя) ===
+GET    /api/v1/billing/plan               # Текущий тариф и баланс
+GET    /api/v1/billing/plans              # Доступные тарифы
+POST   /api/v1/billing/subscribe          # Подписаться / сменить тариф
+POST   /api/v1/billing/cancel             # Отменить подписку
+GET    /api/v1/billing/packages           # Доступные пакеты токенов
+POST   /api/v1/billing/purchase           # Купить пакет
+GET    /api/v1/billing/payments           # История платежей
+GET    /api/v1/billing/usage              # Детализация потребления
+POST   /api/v1/billing/promo             # Применить промокод
+
+# === Уведомления (для пользователя) ===
+GET    /api/v1/notifications              # Список уведомлений
+POST   /api/v1/notifications/:id/read     # Пометить как прочитанное
+POST   /api/v1/notifications/read-all     # Пометить все как прочитанные
+
+# === Суперадминка ===
+# Все admin endpoints требуют role=superadmin в JWT
+
+# Пользователи
+GET    /api/v1/admin/users                # Список (с фильтрами, пагинацией)
+GET    /api/v1/admin/users/:id            # Детали
+POST   /api/v1/admin/users/:id/block      # Заблокировать
+POST   /api/v1/admin/users/:id/unblock    # Разблокировать
+POST   /api/v1/admin/users/:id/change-plan # Сменить тариф
+POST   /api/v1/admin/users/:id/grant-tokens # Начислить бонусные токены
+POST   /api/v1/admin/users/:id/reset-password # Отправить ссылку сброса
+DELETE /api/v1/admin/users/:id            # Soft delete
+GET    /api/v1/admin/users/:id/usage      # Потребление пользователя
+GET    /api/v1/admin/users/:id/instances  # Инстансы пользователя
+GET    /api/v1/admin/users/:id/payments   # Платежи пользователя
+POST   /api/v1/admin/users/:id/impersonate # Получить JWT пользователя
+
+# Тарифы
+GET    /api/v1/admin/plans                # Список
+POST   /api/v1/admin/plans                # Создать
+PATCH  /api/v1/admin/plans/:id            # Обновить
+POST   /api/v1/admin/plans/:id/archive    # Архивировать
+
+# Пакеты токенов
+GET    /api/v1/admin/packages             # Список
+POST   /api/v1/admin/packages             # Создать
+PATCH  /api/v1/admin/packages/:id         # Обновить
+DELETE /api/v1/admin/packages/:id         # Удалить (если нет покупок)
+
+# Промокоды
+GET    /api/v1/admin/promocodes           # Список
+POST   /api/v1/admin/promocodes           # Создать
+PATCH  /api/v1/admin/promocodes/:id       # Обновить
+DELETE /api/v1/admin/promocodes/:id       # Удалить
+
+# Платежи
+GET    /api/v1/admin/payments             # Все платежи (фильтры)
+POST   /api/v1/admin/payments/:id/refund  # Возврат
+
+# Аналитика
+GET    /api/v1/admin/analytics/overview   # MRR, churn, LTV, ARPU, конверсия
+GET    /api/v1/admin/analytics/revenue    # Доход по периодам (подписки + пакеты)
+GET    /api/v1/admin/analytics/usage      # Потребление по моделям, типам, пользователям
+GET    /api/v1/admin/analytics/funnel     # Воронка конверсии
+GET    /api/v1/admin/analytics/margin     # Маржинальность (доход − расход OpenRouter)
+
+# Инстансы
+GET    /api/v1/admin/instances            # Все инстансы (фильтры)
+GET    /api/v1/admin/instances/:id        # Детали (метрики, логи)
+
+# Операционный мониторинг
+GET    /api/v1/admin/workers/status       # Очереди, задержки, ошибки
+GET    /api/v1/admin/openrouter/status    # Баланс, rate limits
+
+# Уведомления (от админа к пользователям)
+POST   /api/v1/admin/notifications/broadcast # Системное уведомление всем / группе
+POST   /api/v1/admin/notifications/send     # Уведомление конкретному пользователю
+
+# Настройки
+GET    /api/v1/admin/settings             # Текущие системные настройки
+PATCH  /api/v1/admin/settings             # Обновить
+
+# Аудит
+GET    /api/v1/admin/audit-log            # Лог действий суперадмина
+```
+
+---
+
+## Дополнительные структуры в проекте
+
+```
+backend/
+├── internal/
+│   ├── handler/
+│   │   ├── admin_users.go         # CRUD пользователей
+│   │   ├── admin_plans.go         # CRUD тарифов
+│   │   ├── admin_packages.go      # CRUD пакетов
+│   │   ├── admin_payments.go      # Платежи
+│   │   ├── admin_analytics.go     # Аналитика
+│   │   ├── admin_promocodes.go    # Промокоды
+│   │   ├── admin_workers.go       # Мониторинг
+│   │   ├── admin_settings.go      # Системные настройки
+│   │   ├── admin_notifications.go # Уведомления
+│   │   ├── admin_audit.go         # Аудит-лог
+│   │   ├── billing.go             # Биллинг пользователя
+│   │   └── notifications.go       # Уведомления пользователя
+│   ├── service/
+│   │   ├── billing.go             # Логика подписок, баланса, списания
+│   │   ├── payment.go             # Интеграция с платёжкой
+│   │   ├── notification.go        # Отправка уведомлений (email + in-app)
+│   │   └── analytics.go           # Расчёт метрик (MRR, churn, LTV)
+│   ├── repository/
+│   │   ├── plan.go
+│   │   ├── subscription.go
+│   │   ├── token_balance.go
+│   │   ├── payment.go
+│   │   ├── promocode.go
+│   │   ├── notification.go
+│   │   └── admin_audit.go
+
+frontend/
+├── src/
+│   ├── app/
+│   │   ├── (admin)/               # Route group для суперадминки
+│   │   │   ├── admin/
+│   │   │   │   ├── layout.tsx     # Admin layout (sidebar, top bar)
+│   │   │   │   ├── page.tsx       # /admin — дашборд
+│   │   │   │   ├── users/
+│   │   │   │   ├── plans/
+│   │   │   │   ├── packages/
+│   │   │   │   ├── payments/
+│   │   │   │   ├── analytics/
+│   │   │   │   ├── promocodes/
+│   │   │   │   ├── instances/
+│   │   │   │   ├── notifications/
+│   │   │   │   ├── workers/
+│   │   │   │   ├── settings/
+│   │   │   │   └── logs/
+│   │   ├── (dashboard)/           # Route group для пользовательского кабинета
+│   │   │   ├── dashboard/
+│   │   │   │   ├── layout.tsx
+│   │   │   │   ├── page.tsx
+│   │   │   │   ├── instances/
+│   │   │   │   ├── billing/
+│   │   │   │   ├── api-keys/
+│   │   │   │   ├── docs/
+│   │   │   │   └── settings/
+```
+
+---
+
+## Порядок разработки (обновлённый)
+
+### Фаза 1: Скелет и инфраструктура
+- Docker Compose (все контейнеры)
+- Health endpoint, nginx routing
+- WordPress лендинг (минимальная тема)
+
+### Фаза 2: Аутентификация и роли
+- Регистрация / логин (JWT с role claim)
+- Суперадмин через seed-скрипт
+- Middleware аутентификации и авторизации (user vs superadmin)
+- API-ключи
+
+### Фаза 3: Биллинг (фундамент)
+- Таблицы: plans, subscriptions, token_balances, payments
+- CRUD тарифов (суперадмин)
+- CRUD пакетов (суперадмин)
+- Подписка / смена тарифа / отмена (пользователь)
+- Баланс токенов и логика списания
+- Лимиты: проверка на каждом ingest/query (402 если исчерпаны)
+- MVP оплата: ручная (без платёжки)
+
+### Фаза 4: RAG-память
+- CRUD инстансов (с проверкой лимитов тарифа)
+- Ingest + query + citations
+- Usage logging (каждый LLM-вызов → usage_log → token consumption)
+
+### Фаза 5: Wiki-память (ConceptHypothesis)
+- Полный цикл: extraction → routing → concepts → wiki pages
+- ActionLog, health metrics
+- Gardener (Phase 0 + proposals + Phase 1)
+
+### Фаза 6: Остальные типы (Episodic, Working, Graph, Reflective)
+
+### Фаза 7: Суперадминка
+- Дашборд с метриками
+- Управление пользователями (block, impersonate, grant tokens)
+- Аналитика (MRR, churn, маржинальность)
+- Мониторинг воркеров
+- Промокоды
+
+### Фаза 8: Уведомления и polish
+- Email-уведомления (token warnings, payments, gardener proposals)
+- In-app уведомления
+- Документация API (MDX)
+- Интеграция платёжной системы (ЮKassa / CloudPayments)
+
+### Фаза 9: Production
+- NATS, Dragonfly, MinIO
+- SSL, мониторинг
+- Бэкапы
+- Rate limiting по тарифам
+
+---
+
+## Критические правила (дополнение)
+
+19. **Каждый LLM-вызов списывает токены с баланса пользователя.** Нет баланса = 402.
+20. **SQL-запросы ВСЕГДА фильтруют по user_id.** Пользователь видит ТОЛЬКО свои данные.
+21. **Суперадмин создаётся через seed/CLI, НЕ через регистрацию.**
+22. **Все действия суперадмина логируются в admin_audit_log.**
+23. **Impersonate логируется.** Actor = `admin_impersonate:<admin_id>`.
+24. **Нельзя удалить тариф с активными пользователями.** Только архивировать.
+25. **Токены списываются FIFO:** сначала plan → затем purchased (по дате покупки).
+26. **Пользователь получает уведомление при 80% и 100% использования токенов.**
