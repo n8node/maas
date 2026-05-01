@@ -1,5 +1,5 @@
 ---
-description: Git remote github.com/n8node/maas, обязательный push после изменений, формат отчёта и деплой-команды для копирования
+description: Git, push, отчёт; деплой — только полные копируемые команды; миграции goose
 globs: ["**/*"]
 alwaysApply: true
 ---
@@ -18,62 +18,87 @@ alwaysApply: true
 После каждого успешного `git push` сообщить явно:
 
 1. **Ветка** (обычно `main`).
-2. **Хеш коммита (короткий)** — это и есть устойчивый «номер» ревизии на GitHub (например `a1b2c3d`).
-3. Прямая ссылка на коммит: `https://github.com/n8node/maas/commit/<FULL_SHA>` (полный SHA взять из вывода `git rev-parse HEAD` после push, если нужен точный линк).
+2. **Короткий SHA** коммита.
+3. Ссылка: `https://github.com/n8node/maas/commit/<FULL_SHA>`.
 
-Фраза «номер пуша» в переписке = **короткий SHA последнего запушенного коммита** + при необходимости номер CI/run (если появится позже).
+## Инструкции агенту: как писать про деплой
 
-## Команды деплоя для пользователя
+- **Никогда** не подменять команды фразами вроде «как раньше», «тот же compose», «`...`» или `docker compose ...` с многоточием.
+- **Всегда** выдавать **готовый к копированию** блок(и) `bash` с **полным** набором команд: `cd`, `git`, `docker compose` с **обоими** `-f` файлами, флаги **без сокращений**, без пропусков строк.
+- Если сценариев несколько (только pull / полный rebuild / проверка) — **отдельный** fenced block на каждый.
+- **Миграции:** в этом проекте SQL применяет **goose** при **старте контейнера backend** (`cmd/server/main.go`). Отдельная команда `make migrate` для применения **не требуется**, если в Makefile не появилось иного. Для проверки после деплоя достаточно здоровья API и при желании — запроса к `goose_db_version` (ниже — готовый блок).
+- Путь на сервере в примерах: **`/opt/maas`**. Пользователь и хост в примерах: заменить **`root@SERVER`** (или свой `user@host`).
 
-- Выдавать команды **полными блоками**, каждый сценарий — **отдельный fenced code block** с языком `bash`, без пропусков (`...`), чтобы пользователь копировал **одним кликом** весь блок.
-- Путь на сервере в примерах: `/opt/maas` (или актуальный из `memory-service-deploy.mdc` — при расхождении приоритет у скриптов в репозитории после их появления).
+## Деплой на сервере (уже есть клон в `/opt/maas`)
 
-### Шаблон: обновление на сервере (SSH + pull + compose)
-
-Пользователь подставляет свой пользователя и хост.
+Подставь свой SSH (`root@mavqojksja` или другой):
 
 ```bash
-ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && git fetch origin && git checkout main && git pull origin main && docker compose -f docker-compose.yml -f docker-compose.prod.yml up --build -d'
+ssh root@SERVER "cd /opt/maas && git fetch origin && git checkout main && git pull origin main && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build"
 ```
 
-### Шаблон: только pull без билда (если образы не менялись)
+Проверка с самого сервера после деплоя:
 
 ```bash
-ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && git pull origin main'
+curl -sf http://127.0.0.1/health
 ```
 
-### Шаблон: миграции после деплоя (когда появится Makefile)
+Проверка, что миграции отработали (строка `migrations applied` в логе backend):
 
 ```bash
-ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && make migrate'
+cd /opt/maas
+docker compose -f docker-compose.yml -f docker-compose.prod.yml logs backend --tail=30
 ```
 
-При первом клонировании на пустой сервер:
+Проверка версий goose в БД (опционально):
 
 ```bash
-ssh deploy@YOUR_SERVER_IP 'cd /opt && git clone https://github.com/n8node/maas.git && cd maas && cp .env.example .env'
+cd /opt/maas
+docker compose -f docker-compose.yml -f docker-compose.prod.yml exec -T postgres psql -U mnemoniqa -d mnemoniqa -c "SELECT version_id, is_applied FROM goose_db_version ORDER BY id DESC LIMIT 5;"
 ```
 
-### SSL: первый выпуск на сервере (авто)
-
-После `make prod` по HTTP и когда DNS уже указывает на сервер. Email Let's Encrypt по умолчанию **`erman.ai@yandex.ru`** (или `CERTBOT_EMAIL` в `.env`). Домен — переменная **`DOMAIN`** в `.env` (по умолчанию в `ssl-init.sh`: `mnemoniqa.com`).
+## Локальный push (разработчик)
 
 ```bash
-ssh deploy@YOUR_SERVER_IP 'cd /opt/maas && chmod +x scripts/ssl-init.sh scripts/ssl-deploy-hook.sh && ./scripts/ssl-init.sh'
-```
-
-Продление (обычно в cron на хосте):
-
-```bash
-sudo certbot renew --quiet --deploy-hook "/opt/maas/scripts/ssl-deploy-hook.sh"
-```
-
-## Локальный push (для копирования разработчиком)
-
-```bash
-cd /path/to/maas
+cd "d:\Cursor Project\MAAS"
 git add -A
 git status
 git commit -m "feat: your message"
 git push origin main
 ```
+
+(Путь к проекту на Windows у разработчика может отличаться — в правиле для репозитория можно указывать корень клона.)
+
+## Первый клон на пустом сервере
+
+```bash
+cd /opt
+git clone https://github.com/n8node/maas.git
+cd maas
+cp .env.example .env
+```
+
+Дальше заполнить `.env` (пароли, `JWT_SECRET`, `API_KEY_SALT`), затем:
+
+```bash
+cd /opt/maas
+docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+```
+
+## SSL: первичный выпуск (когда DNS уже на сервер)
+
+Email Let's Encrypt по умолчанию **`erman.ai@yandex.ru`**; домен — **`DOMAIN`** в `.env`.
+
+```bash
+cd /opt/maas
+chmod +x scripts/ssl-init.sh scripts/ssl-deploy-hook.sh
+./scripts/ssl-init.sh
+```
+
+Продление (часто в cron на хосте):
+
+```bash
+sudo certbot renew --quiet --deploy-hook "/opt/maas/scripts/ssl-deploy-hook.sh"
+```
+
+После появления `nginx/ssl/*.pem` — включить HTTPS в nginx по комментариям в репо (`https.conf.sample` → `https.conf`, пересборка nginx), если ещё не сделано.
