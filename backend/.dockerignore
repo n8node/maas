@@ -1,0 +1,6 @@
+/tmp
+server
+server.exe
+*.exe
+.git
+*.md

@@ -1,0 +1,46 @@
+# Production overlays — resource limits & logging.
+# Usage: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+
+services:
+  postgres:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 2G
+
+  mysql:
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  backend:
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 512M
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional future stack (uncomment when needed):
+  # nats:
+  #   image: nats:2-alpine
+  #   command: ["-js", "-m", "8222"]
+  # dragonfly:
+  #   image: docker.dragonflydb.io/dragonflydb/dragonfly
+  # minio:
+  #   image: minio/minio:latest
+  #   command: server /data --console-address ":9001"
