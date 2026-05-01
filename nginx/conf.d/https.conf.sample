@@ -1,6 +1,7 @@
 # Скопировать в https.conf на сервере ПОСЛЕ успешного ssl-init (есть nginx/ssl/*.pem):
 #   cp nginx/conf.d/https.conf.sample nginx/conf.d/https.conf
-# Затем пересобрать nginx: docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build nginx
+# Затем пересобрать nginx: образ копирует весь conf.d/ (включая https.conf), иначе 443 в контейнере не откроется.
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml build nginx && docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d nginx
 #
 server {
     listen 443 ssl;

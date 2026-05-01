@@ -5,7 +5,9 @@ RUN apk add --no-cache curl \
     && mkdir -p /var/www/certbot
 
 COPY nginx.conf /etc/nginx/nginx.conf
-COPY conf.d/default.conf conf.d/locations.inc conf.d/https.conf.sample /etc/nginx/conf.d/
+# Весь conf.d: после `cp https.conf.sample https.conf` на сервере файл попадает в контекст сборки и копируется в образ.
+# Подхватываются только *.conf (см. nginx.conf); locations.inc подключается через include; *.sample не матчится.
+COPY conf.d/ /etc/nginx/conf.d/
 
 EXPOSE 80 443
 CMD ["nginx", "-g", "daemon off;"]
