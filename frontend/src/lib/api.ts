@@ -49,3 +49,22 @@ export async function meRequest(token: string): Promise<MeUser> {
   }
   return data.data.user;
 }
+
+export type BillingMeData = {
+  tokens_remaining: number;
+  plan?: Record<string, unknown>;
+  subscription?: Record<string, unknown>;
+  buckets: Array<Record<string, unknown>>;
+  payments: Array<Record<string, unknown>>;
+};
+
+export async function billingMeRequest(token: string): Promise<BillingMeData> {
+  const res = await fetch(`${API_BASE}/billing/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: BillingMeData } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load billing");
+  }
+  return data.data;
+}

@@ -59,13 +59,21 @@ export default function DashboardHome() {
           <p className="text-xs text-muted">
             Role: <code className="rounded bg-bg2 px-1">{user.role}</code>
           </p>
-          <button
-            type="button"
-            onClick={logout}
-            className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2"
-          >
-            Sign out
-          </button>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Link
+              href="/billing"
+              className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2"
+            >
+              Billing
+            </Link>
+            <button
+              type="button"
+              onClick={logout}
+              className="rounded-md border border-border px-4 py-2 text-sm text-ink hover:bg-bg2"
+            >
+              Sign out
+            </button>
+          </div>
         </div>
       ) : (
         <div className="flex gap-4">

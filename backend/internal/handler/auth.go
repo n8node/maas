@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/n8node/maas/backend/internal/auth"
+	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/config"
 	"github.com/n8node/maas/backend/internal/repository"
 )
@@ -18,14 +19,16 @@ import (
 type Auth struct {
 	cfg       *config.Config
 	users     *repository.UserRepo
+	billing   *billing.Service
 	jwtTTL    time.Duration
 	jwtSecret []byte
 }
 
-func NewAuth(cfg *config.Config, users *repository.UserRepo) *Auth {
+func NewAuth(cfg *config.Config, users *repository.UserRepo, billing *billing.Service) *Auth {
 	return &Auth{
 		cfg:       cfg,
 		users:     users,
+		billing:   billing,
 		jwtTTL:    7 * 24 * time.Hour,
 		jwtSecret: []byte(cfg.JWTSecret),
 	}
@@ -82,6 +85,9 @@ func (h *Auth) Register(w http.ResponseWriter, r *http.Request) {
 		}
 		WriteError(w, http.StatusInternalServerError, "INTERNAL", "registration failed")
 		return
+	}
+	if h.billing != nil {
+		_ = h.billing.EnsureWelcomeSubscription(r.Context(), u.ID)
 	}
 	token, err := auth.SignJWT(h.jwtSecret, u.ID, u.Email, u.Role, h.jwtTTL)
 	if err != nil {

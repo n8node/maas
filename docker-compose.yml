@@ -63,7 +63,7 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-mnemoniqa}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
       SERVER_PORT: "8080"
-      VERSION: ${VERSION:-0.2.0}
+      VERSION: ${VERSION:-0.3.0}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 16 chars)}
       API_KEY_SALT: ${API_KEY_SALT:?API_KEY_SALT must be set}
 
