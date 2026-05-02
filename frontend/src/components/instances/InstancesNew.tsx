@@ -22,9 +22,9 @@ type MemoryKind = "rag" | "wiki" | "episodic";
 const STANDARD_STEP_LABELS = ["Memory type", "Configuration", "Ingest & sources", "Confirm & create"] as const;
 const EPISODIC_STEP_LABELS = ["Basics", "Decay", "Bi-temporal", "Scoping", "Review & create"] as const;
 const EPISODIC_STEP_HINTS = [
-  "Name & description",
-  "Forgetting curve settings",
-  "Time tracking for facts",
+  "name & description",
+  "forgetting curve settings",
+  "time looking back",
   "user_id & session_id",
   "Confirm and launch",
 ] as const;
@@ -901,43 +901,164 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
             {isEpisodicWizard && step === 4 ? (
               <>
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#3b6d11]">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"
+                    />
+                  </svg>
+                  Step 4 - User &amp; session scoping
+                </div>
                 <h1 className="text-base font-medium tracking-tight text-ink">Isolate memory per user or session</h1>
-                <p className="mt-1 text-[13px] text-muted">
-                  One Episodic instance can serve many users with user_id and optional session_id scoping.
+                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted">
+                  One Episodic instance can serve thousands of users. Pass{" "}
+                  <code className="rounded bg-bg2 px-1 py-0.5 font-mono text-[11px] text-ink">user_id</code> on every
+                  ingest and query to automatically isolate their episodes.
                 </p>
-                <section className="mt-6">
+
+                <section className="mt-7">
                   <h2 className={EPISODIC_SECTION_TITLE}>Scoping mode</h2>
-                  <div className="flex items-center justify-between border-b border-border py-2">
-                    <div>
-                      <div className="text-[13px] text-ink">Enable user_id scoping</div>
-                      <div className="text-[11px] text-subtle">User queries see own episodes plus global episodes.</div>
+                  <div className="flex items-start justify-between gap-3 border-b border-border py-2.5">
+                    <div className="min-w-0 pr-2">
+                      <div className="text-[13px] font-medium text-ink">Enable user_id scoping</div>
+                      <p className="mt-1 text-[12px] leading-snug text-subtle">
+                        Each user sees only their own episodes plus any global episodes (no{" "}
+                        <code className="font-mono text-[11px] text-ink">user_id</code>). Standard for multi-user apps.
+                      </p>
                     </div>
-                    <Toggle id="episodic-user-scope" on={userScoping} onToggle={() => setUserScoping((v) => !v)} />
+                    <Toggle
+                      id="episodic-user-scope"
+                      accent="episodic"
+                      on={userScoping}
+                      onToggle={() => setUserScoping((v) => !v)}
+                    />
                   </div>
-                  <div className="flex items-center justify-between border-b border-border py-2">
-                    <div>
-                      <div className="text-[13px] text-ink">Enable session_id scoping</div>
-                      <div className="text-[11px] text-subtle">Further isolate episodes inside a conversation session.</div>
+                  <div className="flex items-start justify-between gap-3 border-b border-border py-2.5">
+                    <div className="min-w-0 pr-2">
+                      <div className="text-[13px] font-medium text-ink">Enable session_id scoping</div>
+                      <p className="mt-1 text-[12px] leading-snug text-subtle">
+                        Further isolate episodes within a single conversation session. Useful for short-term working memory
+                        within a session.
+                      </p>
                     </div>
-                    <Toggle id="episodic-session-scope" on={sessionScoping} onToggle={() => setSessionScoping((v) => !v)} />
-                  </div>
-                  <div className="flex items-center justify-between py-2">
-                    <div>
-                      <div className="text-[13px] text-ink">Enable per-user deletion (GDPR)</div>
-                      <div className="text-[11px] text-subtle">Allow deleting all episodes for a specific user scope.</div>
-                    </div>
-                    <Toggle id="episodic-gdpr" on={gdprDeletionEnabled} onToggle={() => setGdprDeletionEnabled((v) => !v)} />
+                    <Toggle
+                      id="episodic-session-scope"
+                      accent="episodic"
+                      on={sessionScoping}
+                      onToggle={() => setSessionScoping((v) => !v)}
+                    />
                   </div>
                 </section>
 
-                <section className="mt-6">
+                <section className="mt-7">
+                  <h2 className={EPISODIC_SECTION_TITLE}>How it works</h2>
+                  <div className="rounded-[12px] border border-border bg-bg2 px-4 py-3.5">
+                    <p className="text-[12px] leading-snug text-ink">
+                      Query with{" "}
+                      <code className="rounded border border-border bg-bg px-1 py-0.5 font-mono text-[11px]">
+                        user_id = user_alice
+                      </code>{" "}
+                      → <span className="font-medium text-accent">user_alice</span>
+                      <span className="text-subtle"> + </span>
+                      <span className="font-medium text-muted">global</span>
+                      <span className="text-subtle"> episodes</span>
+                    </p>
+                    <ul className="mt-3 space-y-2.5">
+                      <li className="flex flex-wrap items-start gap-2 text-[12px] leading-snug text-ink">
+                        <span className="mt-0.5 shrink-0 rounded-full bg-[#e6f1fb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#185fa5]">
+                          user_alice
+                        </span>
+                        <span>
+                          <span className="text-muted">Episode:</span> &quot;Alice mentioned sleep issues&quot;{" "}
+                          <span className="text-subtle">· 2d ago</span>
+                        </span>
+                      </li>
+                      <li className="flex flex-wrap items-start gap-2 text-[12px] leading-snug text-ink">
+                        <span className="mt-0.5 shrink-0 rounded-full bg-[#e6f1fb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#185fa5]">
+                          user_alice
+                        </span>
+                        <span>
+                          <span className="text-muted">Episode:</span> &quot;Alice goals: lose 5kg by July&quot;{" "}
+                          <span className="text-subtle">· 7w ago</span>
+                        </span>
+                      </li>
+                      <li className="flex flex-wrap items-start gap-2 text-[12px] leading-snug text-ink">
+                        <span className="mt-0.5 shrink-0 rounded-full border border-border bg-bg px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-subtle">
+                          global
+                        </span>
+                        <span>
+                          <span className="text-muted">Episode:</span> &quot;App-wide coaching guideline update&quot;{" "}
+                          <span className="text-subtle">· 3d ago</span>
+                        </span>
+                      </li>
+                    </ul>
+                    <p className="mt-3 border-t border-border pt-3 text-[12px] font-medium text-ink">
+                      user_bob cannot see alice&apos;s episodes
+                    </p>
+                    <div className="mt-3 flex flex-wrap items-center gap-1.5 text-[11px]">
+                      <span className="rounded-full bg-[#fcebeb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#a32d2d]">
+                        user_bob
+                      </span>
+                      <span className="text-subtle">+</span>
+                      <span className="rounded-full bg-[#fcebeb] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#a32d2d]">
+                        user_alice
+                      </span>
+                      <span className="text-subtle">→</span>
+                      <span className="font-semibold text-[#a32d2d]">Filtered out</span>
+                      <span className="text-subtle">— user isolation</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mt-7">
+                  <h2 className={EPISODIC_SECTION_TITLE}>GDPR / data deletion</h2>
+                  <div className="flex items-start justify-between gap-3 border-b border-border py-2.5">
+                    <div className="min-w-0 pr-2">
+                      <div className="text-[13px] font-medium text-ink">Enable per-user deletion (GDPR)</div>
+                      <p className="mt-1 text-[12px] leading-snug text-subtle">
+                        Exposes{" "}
+                        <code className="whitespace-nowrap rounded bg-bg2 px-1 py-0.5 font-mono text-[10px] text-ink">
+                          DELETE /api/v1/instances/:id/scopes/:user_id
+                        </code>{" "}
+                        — permanently removes all episodes for a specific user. Required for EU compliance.
+                      </p>
+                    </div>
+                    <Toggle
+                      id="episodic-gdpr"
+                      accent="episodic"
+                      on={gdprDeletionEnabled}
+                      onToggle={() => setGdprDeletionEnabled((v) => !v)}
+                    />
+                  </div>
+                  <div className="mt-3 flex gap-2.5 rounded-[12px] border border-[#c8d8f0] bg-[#e6f1fb] px-3.5 py-3 text-[12px] leading-relaxed text-[#185fa5]">
+                    <span className="mt-0.5 shrink-0" aria-hidden>
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#185fa5" strokeWidth="2">
+                        <circle cx="12" cy="12" r="10" />
+                        <path strokeLinecap="round" d="M12 16v-4M12 8h.01" />
+                      </svg>
+                    </span>
+                    <p>
+                      Scope stats and per-user episode counts are available at{" "}
+                      <code className="whitespace-nowrap rounded border border-[#b5d4f4] bg-bg px-1.5 py-0.5 font-mono text-[11px] text-[#185fa5]">
+                        GET /api/v1/instances/:id/scopes
+                      </code>
+                    </p>
+                  </div>
+                </section>
+
+                <section className="mt-7">
                   <h2 className={EPISODIC_SECTION_TITLE}>Retention policy</h2>
-                  <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-retention">
+                  <label className="mb-0.5 block text-[12px] font-medium text-ink" htmlFor="episodic-retention">
                     Maximum episode age
                   </label>
+                  <p className="mb-2 text-[11px] leading-snug text-subtle">
+                    Episodes older than this are eligible for deletion.
+                  </p>
                   <select
                     id="episodic-retention"
-                    className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px]"
+                    className="h-[38px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px] outline-none focus:border-[#3b6d11]"
                     value={episodicRetention}
                     onChange={(e) =>
                       setEpisodicRetention(e.target.value as (typeof EPISODIC_RETENTION_OPTIONS)[number]["value"])
