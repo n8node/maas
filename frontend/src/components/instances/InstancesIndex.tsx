@@ -231,8 +231,8 @@ export function InstancesIndex({ user, onLogout }: { user: MeUser; onLogout?: ()
         >
           <strong className="font-medium">Memory instances</strong> are isolated stores you attach to agents or apps.{" "}
           <span className="text-muted">RAG</span> keeps chunked text for retrieval (optional LLM synthesis on query).{" "}
-          <span className="text-muted">Wiki</span> builds concept hypotheses with lineage and gardener workflows. Other memory types ship
-          over time.
+          <span className="text-muted">Wiki</span> builds concept hypotheses with lineage and gardener workflows.{" "}
+          <span className="text-muted">Episodic</span> stores timestamped user episodes with configurable decay.
         </div>
 
         {err ? (

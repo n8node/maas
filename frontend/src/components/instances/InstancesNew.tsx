@@ -17,9 +17,10 @@ import {
 import { getToken } from "@/lib/token";
 import clsx from "clsx";
 
-type MemoryKind = "rag" | "wiki";
+type MemoryKind = "rag" | "wiki" | "episodic";
 
-const STEP_LABELS = ["Memory type", "Configuration", "Ingest & sources", "Confirm & create"] as const;
+const STANDARD_STEP_LABELS = ["Memory type", "Configuration", "Ingest & sources", "Confirm & create"] as const;
+const EPISODIC_STEP_LABELS = ["Basics", "Decay", "Bi-temporal", "Scoping", "Review & create"] as const;
 
 const MEMORY_TYPES: Array<{
   id: MemoryKind;
@@ -44,6 +45,13 @@ const MEMORY_TYPES: Array<{
     col: "#185fa5",
     desc: "Vector search over documents",
   },
+  {
+    id: "episodic",
+    name: "Episodic",
+    bg: "#eaf3de",
+    col: "#3b6d11",
+    desc: "Chronological memory with decay",
+  },
 ];
 
 /** Default model ids stored in instance config; runtime follows server settings. */
@@ -51,8 +59,31 @@ const DEFAULT_INSTANCE_MODEL_REFS = {
   extraction_model: "openai/gpt-4o-mini",
   embedding_model: "openai/text-embedding-3-small",
 } as const;
+const EPISODIC_EMBEDDING_MODELS = [
+  "text-embedding-3-large",
+  "text-embedding-3-small",
+] as const;
 const WIKI_CONCEPTS = ["fact", "entity", "event", "goal", "belief", "tension", "project", "pattern"] as const;
 const GARDENER_SCHEDULES = ["Every 24 hours", "Every 12 hours", "Manual only"] as const;
+const EPISODIC_DECAY_SCHEDULES = ["Every 24 hours (recommended)", "Every 12 hours", "Every 6 hours", "Manual only"] as const;
+const EPISODIC_INVALIDATION_OPTIONS = [
+  { value: "close", label: "Close valid_until — mark as no longer valid (recommended)" },
+  { value: "archive", label: "Archive the episode — keep in history, exclude from active queries" },
+  { value: "delete", label: "Hard delete — remove permanently" },
+] as const;
+const EPISODIC_RETENTION_OPTIONS = [
+  { value: "never", label: "Never auto-delete (manual only)" },
+  { value: "90", label: "90 days" },
+  { value: "180", label: "180 days" },
+  { value: "365", label: "1 year" },
+  { value: "730", label: "2 years" },
+] as const;
+
+function episodicDecayColor(weight: number): string {
+  if (weight >= 0.5) return "#3b6d11";
+  if (weight >= 0.2) return "#ba7517";
+  return "#d3d1c7";
+}
 
 function StepDot({ done, active, n }: { done: boolean; active: boolean; n: number }) {
   if (done) {
@@ -108,12 +139,32 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const router = useRouter();
   const searchParams = useSearchParams();
   const token = getToken() ?? "";
+  const requestedType = searchParams.get("type");
+  const defaultType: MemoryKind =
+    requestedType === "rag" || requestedType === "wiki" || requestedType === "episodic" ? requestedType : "wiki";
 
   const [step, setStep] = useState(1);
-  const [memoryType, setMemoryType] = useState<MemoryKind>(() =>
-    searchParams.get("type") === "rag" ? "rag" : "wiki",
-  );
+  const [memoryType, setMemoryType] = useState<MemoryKind>(defaultType);
   const [name, setName] = useState("Product Knowledge Base");
+  const [episodicDescription, setEpisodicDescription] = useState(
+    "Chronological memory for AI coaching sessions. Stores user conversations, mood check-ins, and progress notes per user.",
+  );
+  const [episodicUseCase, setEpisodicUseCase] = useState<"coach" | "support" | "personal">("coach");
+  const [episodicEmbeddingModel, setEpisodicEmbeddingModel] = useState<(typeof EPISODIC_EMBEDDING_MODELS)[number]>(
+    "text-embedding-3-large",
+  );
+  const [decayRate, setDecayRate] = useState(14);
+  const [decayWorkerEnabled, setDecayWorkerEnabled] = useState(true);
+  const [decaySchedule, setDecaySchedule] = useState<string>(EPISODIC_DECAY_SCHEDULES[0]);
+  const [retrievalThreshold, setRetrievalThreshold] = useState(12);
+  const [biTemporalEnabled, setBiTemporalEnabled] = useState(true);
+  const [pointInTimeEnabled, setPointInTimeEnabled] = useState(true);
+  const [invalidationMode, setInvalidationMode] =
+    useState<(typeof EPISODIC_INVALIDATION_OPTIONS)[number]["value"]>("close");
+  const [gdprDeletionEnabled, setGdprDeletionEnabled] = useState(true);
+  const [episodicRetention, setEpisodicRetention] = useState<(typeof EPISODIC_RETENTION_OPTIONS)[number]["value"]>(
+    "never",
+  );
   const [conceptPick, setConceptPick] = useState(defaultConcepts);
   const [gardenerEnabled, setGardenerEnabled] = useState(true);
   const [gardenerSchedule, setGardenerSchedule] = useState<string>(GARDENER_SCHEDULES[0]);
@@ -131,11 +182,32 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const isEpisodicWizard = memoryType === "episodic" && requestedType === "episodic";
+  const stepLabels = isEpisodicWizard ? EPISODIC_STEP_LABELS : STANDARD_STEP_LABELS;
+  const maxStep = stepLabels.length;
+  const decayRateDaily = useMemo(() => decayRate / 100, [decayRate]);
+  const decayHalfLifeDays = useMemo(() => Math.round(Math.log(2) / Math.max(decayRateDaily, 0.0001)), [decayRateDaily]);
+  const decayBars = useMemo(() => {
+    const days = [0, 1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60, 90];
+    return days.map((day) => {
+      const weight = Math.exp(-decayRateDaily * day);
+      return {
+        day,
+        weight,
+        height: Math.max(4, Math.round(weight * 56) + 2),
+        color: episodicDecayColor(weight),
+      };
+    });
+  }, [decayRateDaily]);
 
   useEffect(() => {
     const t = searchParams.get("type");
-    if (t === "rag" || t === "wiki") {
+    if (t === "rag" || t === "wiki" || t === "episodic") {
       setMemoryType(t);
+      setStep(1);
+      if (t === "episodic") {
+        setName("Coach Bot History");
+      }
     }
   }, [searchParams]);
 
@@ -150,6 +222,32 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
       ...DEFAULT_INSTANCE_MODEL_REFS,
       scoping: { user_id: userScoping, session_id: sessionScoping },
     };
+    if (memoryType === "episodic") {
+      return {
+        description: episodicDescription.trim() || undefined,
+        use_case: episodicUseCase,
+        embedding_model: episodicEmbeddingModel,
+        decay: {
+          daily_factor: Number(decayRateDaily.toFixed(2)),
+          auto_worker: decayWorkerEnabled,
+          schedule: decaySchedule,
+          retrieval_threshold: Number((retrievalThreshold / 100).toFixed(2)),
+        },
+        bi_temporal: {
+          enabled: biTemporalEnabled,
+          point_in_time: pointInTimeEnabled,
+          invalidation_mode: invalidationMode,
+        },
+        scoping: {
+          user_id: userScoping,
+          session_id: sessionScoping,
+          gdpr_delete: gdprDeletionEnabled,
+        },
+        retention: {
+          max_age_days: episodicRetention === "never" ? null : Number(episodicRetention),
+        },
+      };
+    }
     if (memoryType === "wiki") {
       return {
         ...base,
@@ -164,24 +262,36 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
       features: { hierarchical_clustering: hierarchicalClustering },
     };
   }, [
+    biTemporalEnabled,
     chunkOverlap,
     chunkSize,
     conceptPick,
+    decayRateDaily,
+    decaySchedule,
+    decayWorkerEnabled,
+    episodicDescription,
+    episodicEmbeddingModel,
+    episodicRetention,
+    episodicUseCase,
     gardenerEnabled,
     gardenerSchedule,
+    gdprDeletionEnabled,
     hierarchicalClustering,
+    invalidationMode,
     memoryType,
+    pointInTimeEnabled,
+    retrievalThreshold,
     sessionScoping,
     userScoping,
   ]);
 
   const configPayload = useMemo(() => {
     const c = buildConfig() as Record<string, unknown>;
-    if (seedText.trim()) {
+    if (!isEpisodicWizard && seedText.trim()) {
       c.seed_draft_text = seedText.trim();
     }
     return c;
-  }, [buildConfig, seedText]);
+  }, [buildConfig, isEpisodicWizard, seedText]);
 
   function addWizFilesFromList(fileList: FileList | File[]) {
     const list = Array.from(fileList);
@@ -194,14 +304,15 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   }
 
   function canContinue(): boolean {
-    if (step === 2) return name.trim().length > 0;
+    if (isEpisodicWizard && step === 1) return name.trim().length > 0;
+    if (!isEpisodicWizard && step === 2) return name.trim().length > 0;
     return true;
   }
 
   function goNext() {
     if (!canContinue()) return;
     setErr(null);
-    setStep((s) => Math.min(4, s + 1));
+    setStep((s) => Math.min(maxStep, s + 1));
   }
 
   function goBack() {
@@ -220,23 +331,25 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         config: configPayload,
       });
       const failures: string[] = [];
-      const st = seedText.trim();
-      if (st) {
-        try {
-          if (memoryType === "wiki") {
-            await ingestInstance(token, id, { text: st, source_title: "Wizard seed" });
-          } else {
-            await ingestInstance(token, id, { text: st, source_label: "wizard-seed" });
+      if (!isEpisodicWizard) {
+        const st = seedText.trim();
+        if (st) {
+          try {
+            if (memoryType === "wiki") {
+              await ingestInstance(token, id, { text: st, source_title: "Wizard seed" });
+            } else {
+              await ingestInstance(token, id, { text: st, source_label: "wizard-seed" });
+            }
+          } catch (e) {
+            failures.push(`Seed text: ${e instanceof Error ? e.message : "failed"}`);
           }
-        } catch (e) {
-          failures.push(`Seed text: ${e instanceof Error ? e.message : "failed"}`);
         }
-      }
-      for (const file of wizFiles) {
-        try {
-          await ingestInstanceFile(token, id, file);
-        } catch (e) {
-          failures.push(`${file.name}: ${e instanceof Error ? e.message : "upload failed"}`);
+        for (const file of wizFiles) {
+          try {
+            await ingestInstanceFile(token, id, file);
+          } catch (e) {
+            failures.push(`${file.name}: ${e instanceof Error ? e.message : "upload failed"}`);
+          }
         }
       }
       if (failures.length > 0) {
@@ -286,11 +399,11 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         <aside className="w-[200px] shrink-0 border-r border-border bg-bg px-4 py-6">
           <div className="mb-4 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle">Setup steps</div>
           <ul className="space-y-0">
-            {STEP_LABELS.map((label, i) => {
+            {stepLabels.map((label, i) => {
               const n = i + 1;
               const done = step > n;
               const active = step === n;
-              const isLast = i === STEP_LABELS.length - 1;
+              const isLast = i === stepLabels.length - 1;
               return (
                 <li key={label} className={clsx("relative flex gap-2.5", !isLast ? "pb-6" : "")}>
                   {!isLast ? (
@@ -316,12 +429,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto px-7 py-7">
-            {step === 1 ? (
+            {!isEpisodicWizard && step === 1 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Choose memory type</h1>
                 <p className="mt-1 text-[13px] text-muted">Select the type of memory that fits your use case.</p>
                 <div className="mt-7 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {MEMORY_TYPES.map((t) => {
+                  {MEMORY_TYPES.filter((t) => t.id !== "episodic").map((t) => {
                     const sel = memoryType === t.id;
                     return (
                       <button
@@ -360,7 +473,387 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               </>
             ) : null}
 
-            {step === 2 ? (
+            {isEpisodicWizard && step === 1 ? (
+              <>
+                <h1 className="text-base font-medium tracking-tight text-ink">Name your instance</h1>
+                <p className="mt-1 text-[13px] text-muted">
+                  Episodic memory stores timestamped episodes from interactions, like a chronological journal.
+                </p>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Identity
+                  </h2>
+                  <div className="space-y-3.5">
+                    <div>
+                      <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-name">
+                        Instance name
+                      </label>
+                      <input
+                        id="episodic-name"
+                        className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[13px] text-ink outline-none focus:border-[#3b6d11]"
+                        value={name}
+                        onChange={(e) => setName(e.target.value)}
+                        autoComplete="off"
+                        maxLength={128}
+                      />
+                    </div>
+                    <div>
+                      <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-desc">
+                        Description
+                      </label>
+                      <textarea
+                        id="episodic-desc"
+                        className="min-h-[66px] w-full resize-y rounded-lg border border-border2 bg-bg px-2.5 py-2 text-[12px] leading-relaxed text-ink outline-none focus:border-[#3b6d11]"
+                        value={episodicDescription}
+                        onChange={(e) => setEpisodicDescription(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Embedding model
+                  </h2>
+                  <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-embed">
+                    Model
+                  </label>
+                  <select
+                    id="episodic-embed"
+                    className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px] text-ink outline-none focus:border-[#3b6d11]"
+                    value={episodicEmbeddingModel}
+                    onChange={(e) =>
+                      setEpisodicEmbeddingModel(e.target.value as (typeof EPISODIC_EMBEDDING_MODELS)[number])
+                    }
+                  >
+                    {EPISODIC_EMBEDDING_MODELS.map((model) => (
+                      <option key={model} value={model}>
+                        {model}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="mt-2 rounded-lg border border-[#c8d8f0] bg-[#f0f4fb] px-3 py-2 text-[12px] text-[#1d3a6b]">
+                    Episodic memory stores episodes as-is with embeddings only. No extraction model needed.
+                  </p>
+                </section>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Use case preview
+                  </h2>
+                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+                    {(
+                      [
+                        ["coach", "AI Coach / Therapist", "Track sessions, mood and long-term progress."],
+                        ["support", "Support Agent", "Remember past tickets and user complaints."],
+                        ["personal", "Personal Assistant", "Keep conversation history and preferences."],
+                      ] as const
+                    ).map(([id, title, desc]) => {
+                      const selected = episodicUseCase === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setEpisodicUseCase(id)}
+                          className={clsx(
+                            "rounded-lg border px-3 py-2 text-left transition-colors",
+                            selected ? "border-[#3b6d11] bg-[#eaf3de]" : "border-border hover:border-border2",
+                          )}
+                        >
+                          <div className="text-[12px] font-medium text-ink">{title}</div>
+                          <p className="mt-0.5 text-[11px] text-subtle">{desc}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </section>
+              </>
+            ) : null}
+
+            {isEpisodicWizard && step === 2 ? (
+              <>
+                <h1 className="text-base font-medium tracking-tight text-ink">How fast should old memories fade?</h1>
+                <p className="mt-1 text-[13px] text-muted">
+                  Decay reduces retrieval weight for older episodes. Recent episodes surface first; old ones stay queryable.
+                </p>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Decay rate
+                  </h2>
+                  <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
+                    <span>Daily decay factor</span>
+                    <span className="font-medium text-[#3b6d11]">{decayRateDaily.toFixed(2)} / day</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={30}
+                    value={decayRate}
+                    onChange={(e) => setDecayRate(Number(e.target.value))}
+                    className="w-full accent-[#3b6d11]"
+                  />
+                  <div className="mt-1 flex justify-between text-[10px] text-subtle">
+                    <span>Slow (0.01)</span>
+                    <span>Medium (0.10)</span>
+                    <span>Fast (0.30)</span>
+                  </div>
+
+                  <div className="mt-3 rounded-[12px] border border-border bg-bg px-4 py-3">
+                    <div className="mb-2.5 flex items-center justify-between text-[11px] text-muted">
+                      <span>Decay preview — weight over time</span>
+                      <span>Half-life: ~{decayHalfLifeDays} days</span>
+                    </div>
+                    <div className="mb-2 flex h-[64px] items-end gap-1">
+                      {decayBars.map((bar) => (
+                        <div
+                          key={bar.day}
+                          title={`Day ${bar.day}: ${bar.weight.toFixed(2)}`}
+                          className="min-w-[5px] flex-1 rounded-t-sm transition-all duration-200 ease-out"
+                          style={{
+                            height: `${bar.height}px`,
+                            backgroundColor: bar.color,
+                            opacity: 0.4 + bar.weight * 0.6,
+                          }}
+                        />
+                      ))}
+                    </div>
+                    <div className="flex justify-between text-[9px] text-subtle">
+                      <span>Today</span>
+                      <span>1 week</span>
+                      <span>1 month</span>
+                      <span>3 months</span>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Decay schedule
+                  </h2>
+                  <div className="flex items-center justify-between border-b border-border py-2">
+                    <div>
+                      <div className="text-[13px] text-ink">Automatic decay worker</div>
+                      <div className="text-[11px] text-subtle">Runs periodically to recalculate episode weights.</div>
+                    </div>
+                    <Toggle id="episodic-decay-auto" on={decayWorkerEnabled} onToggle={() => setDecayWorkerEnabled((v) => !v)} />
+                  </div>
+                  <div className="mt-3">
+                    <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-schedule">
+                      Run schedule
+                    </label>
+                    <select
+                      id="episodic-schedule"
+                      className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px]"
+                      value={decaySchedule}
+                      onChange={(e) => setDecaySchedule(e.target.value)}
+                    >
+                      {EPISODIC_DECAY_SCHEDULES.map((s) => (
+                        <option key={s} value={s}>
+                          {s}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </section>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Retrieval threshold
+                  </h2>
+                  <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
+                    <span>Minimum weight in results</span>
+                    <span className="font-medium text-[#3b6d11]">weight ≥ {(retrievalThreshold / 100).toFixed(2)}</span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={40}
+                    value={retrievalThreshold}
+                    onChange={(e) => setRetrievalThreshold(Number(e.target.value))}
+                    className="w-full accent-[#3b6d11]"
+                  />
+                </section>
+              </>
+            ) : null}
+
+            {isEpisodicWizard && step === 3 ? (
+              <>
+                <h1 className="text-base font-medium tracking-tight text-ink">Two timelines for every episode</h1>
+                <p className="mt-1 text-[13px] text-muted">
+                  Bi-temporal facts track real-world valid time and system recording time independently.
+                </p>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Enable bi-temporal
+                  </h2>
+                  <div className="flex items-center justify-between border-b border-border py-2">
+                    <div>
+                      <div className="text-[13px] text-ink">Bi-temporal facts</div>
+                      <div className="text-[11px] text-subtle">Store valid_from/valid_until for point-in-time queries.</div>
+                    </div>
+                    <Toggle id="episodic-bitemp" on={biTemporalEnabled} onToggle={() => setBiTemporalEnabled((v) => !v)} />
+                  </div>
+                </section>
+
+                <section className={clsx("mt-6 space-y-6 transition-opacity", biTemporalEnabled ? "opacity-100" : "pointer-events-none opacity-50")}>
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
+                      <div className="text-[11px] font-medium text-muted">Valid time</div>
+                      <p className="mt-1 text-[12px] text-subtle">When an event actually happened in the real world.</p>
+                    </div>
+                    <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
+                      <div className="text-[11px] font-medium text-muted">System time</div>
+                      <p className="mt-1 text-[12px] text-subtle">When your system recorded the episode.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center justify-between border-b border-border py-2">
+                    <div>
+                      <div className="text-[13px] text-ink">Enable historical projection</div>
+                      <div className="text-[11px] text-subtle">Allow queries with as_of date snapshots.</div>
+                    </div>
+                    <Toggle id="episodic-pit" on={pointInTimeEnabled} onToggle={() => setPointInTimeEnabled((v) => !v)} />
+                  </div>
+
+                  <div>
+                    <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-invalidation">
+                      Invalidation behaviour
+                    </label>
+                    <select
+                      id="episodic-invalidation"
+                      className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px]"
+                      value={invalidationMode}
+                      onChange={(e) =>
+                        setInvalidationMode(e.target.value as (typeof EPISODIC_INVALIDATION_OPTIONS)[number]["value"])
+                      }
+                    >
+                      {EPISODIC_INVALIDATION_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value}>
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </section>
+              </>
+            ) : null}
+
+            {isEpisodicWizard && step === 4 ? (
+              <>
+                <h1 className="text-base font-medium tracking-tight text-ink">Isolate memory per user or session</h1>
+                <p className="mt-1 text-[13px] text-muted">
+                  One Episodic instance can serve many users with user_id and optional session_id scoping.
+                </p>
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Scoping mode
+                  </h2>
+                  <div className="flex items-center justify-between border-b border-border py-2">
+                    <div>
+                      <div className="text-[13px] text-ink">Enable user_id scoping</div>
+                      <div className="text-[11px] text-subtle">User queries see own episodes plus global episodes.</div>
+                    </div>
+                    <Toggle id="episodic-user-scope" on={userScoping} onToggle={() => setUserScoping((v) => !v)} />
+                  </div>
+                  <div className="flex items-center justify-between border-b border-border py-2">
+                    <div>
+                      <div className="text-[13px] text-ink">Enable session_id scoping</div>
+                      <div className="text-[11px] text-subtle">Further isolate episodes inside a conversation session.</div>
+                    </div>
+                    <Toggle id="episodic-session-scope" on={sessionScoping} onToggle={() => setSessionScoping((v) => !v)} />
+                  </div>
+                  <div className="flex items-center justify-between py-2">
+                    <div>
+                      <div className="text-[13px] text-ink">Enable per-user deletion (GDPR)</div>
+                      <div className="text-[11px] text-subtle">Allow deleting all episodes for a specific user scope.</div>
+                    </div>
+                    <Toggle id="episodic-gdpr" on={gdprDeletionEnabled} onToggle={() => setGdprDeletionEnabled((v) => !v)} />
+                  </div>
+                </section>
+
+                <section className="mt-6">
+                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
+                    Retention policy
+                  </h2>
+                  <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-retention">
+                    Maximum episode age
+                  </label>
+                  <select
+                    id="episodic-retention"
+                    className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px]"
+                    value={episodicRetention}
+                    onChange={(e) =>
+                      setEpisodicRetention(e.target.value as (typeof EPISODIC_RETENTION_OPTIONS)[number]["value"])
+                    }
+                  >
+                    {EPISODIC_RETENTION_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                </section>
+              </>
+            ) : null}
+
+            {isEpisodicWizard && step === 5 ? (
+              <>
+                <h1 className="text-base font-medium tracking-tight text-ink">Review and create</h1>
+                <p className="mt-1 text-[13px] text-muted">
+                  Your Episodic instance will be ready immediately. You can change settings later.
+                </p>
+
+                <div className="mt-6 rounded-[12px] border border-border bg-bg px-4 py-3">
+                  {(
+                    [
+                      ["Memory type", "Episodic"],
+                      ["Name", name.trim() || "—"],
+                      ["Embedding model", episodicEmbeddingModel],
+                      ["Decay rate", `${decayRateDaily.toFixed(2)} / day · ~${decayHalfLifeDays} days half-life`],
+                      ["Decay worker", decayWorkerEnabled ? decaySchedule : "Disabled"],
+                      ["Bi-temporal facts", biTemporalEnabled ? "Enabled" : "Disabled"],
+                      ["Point-in-time queries", pointInTimeEnabled ? "Enabled" : "Disabled"],
+                      ["Invalidation", EPISODIC_INVALIDATION_OPTIONS.find((x) => x.value === invalidationMode)?.label ?? "—"],
+                      ["user_id scoping", userScoping ? "Enabled" : "Disabled"],
+                      ["session_id scoping", sessionScoping ? "Enabled" : "Disabled"],
+                      ["GDPR deletion endpoint", gdprDeletionEnabled ? "Enabled" : "Disabled"],
+                      ["Retention policy", EPISODIC_RETENTION_OPTIONS.find((x) => x.value === episodicRetention)?.label ?? "—"],
+                      ["Plan", planLine],
+                    ] as const
+                  ).map(([k, v]) => (
+                    <div
+                      key={k}
+                      className="flex items-center justify-between border-b border-border py-1.5 text-[12px] last:border-0"
+                    >
+                      <span className="text-subtle">{k}</span>
+                      <span className="max-w-[60%] text-right font-medium text-ink">{v}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="mt-4 flex items-center justify-between rounded-lg border border-[#8ec95c] bg-[#eaf3de] px-3.5 py-3">
+                  <div>
+                    <div className="text-[12px] text-[#2d6b0f]">Cost estimate</div>
+                    <div className="text-[10px] text-[#2d6b0f]/80">Embedding only — no extraction model cost</div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-sm font-medium text-[#3b6d11]">~$0.002</div>
+                    <div className="text-[10px] text-[#2d6b0f]/80">/1K episodes</div>
+                  </div>
+                </div>
+
+                {err ? (
+                  <div className="mt-4 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-xs text-error">
+                    {err}
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+
+            {!isEpisodicWizard && step === 2 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Configure {typeMeta.name} memory</h1>
                 <p className="mt-1 text-[13px] text-muted">Customize the instance settings. You can change these later.</p>
@@ -527,7 +1020,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               </>
             ) : null}
 
-            {step === 3 ? (
+            {!isEpisodicWizard && step === 3 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Ingest &amp; sources</h1>
                 <p className="mt-1 text-[13px] text-muted">
@@ -619,7 +1112,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               </>
             ) : null}
 
-            {step === 4 ? (
+            {!isEpisodicWizard && step === 4 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Confirm and create</h1>
                 <p className="mt-1 text-[13px] text-muted">Review your configuration before creating the instance.</p>
@@ -685,7 +1178,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
           <footer className="flex shrink-0 items-center justify-between border-t border-border bg-bg px-7 py-3.5">
             <span className="text-[12px] text-subtle">
-              Step {step} of 4 — {STEP_LABELS[step - 1]}
+              Step {step} of {maxStep} — {stepLabels[step - 1]}
             </span>
             <div className="flex gap-2">
               <button
@@ -696,7 +1189,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               >
                 Back
               </button>
-              {step < 4 ? (
+              {step < maxStep ? (
                 <button
                   type="button"
                   onClick={goNext}

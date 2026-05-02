@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
+import { EpisodicInstancePanels } from "@/components/instances/EpisodicInstancePanels";
 import { RagInstancePanels } from "@/components/instances/RagInstancePanels";
 import { WikiInstancePanels } from "@/components/instances/WikiInstancePanels";
 import { deleteInstance, getInstance, type MeUser, type MemoryInstanceDTO } from "@/lib/api";
@@ -74,9 +75,16 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
 
   const isRag = inst.memory_type === "rag";
   const isWiki = inst.memory_type === "wiki";
+  const isEpisodic = inst.memory_type === "episodic";
   const typeBadge =
-    inst.memory_type === "rag" ? "RAG" : inst.memory_type === "wiki" ? "Wiki" : inst.memory_type.toUpperCase();
-  const fullBleed = isWiki || isRag;
+    inst.memory_type === "rag"
+      ? "RAG"
+      : inst.memory_type === "wiki"
+        ? "Wiki"
+        : inst.memory_type === "episodic"
+          ? "Episodic"
+          : inst.memory_type.toUpperCase();
+  const fullBleed = isWiki || isRag || isEpisodic;
 
   return (
     <InstancesShell
@@ -109,6 +117,13 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         />
       ) : isRag ? (
         <RagInstancePanels
+          instanceId={instanceId}
+          inst={inst}
+          onRefreshInstance={load}
+          onDeleteInstance={onDelete}
+        />
+      ) : isEpisodic ? (
+        <EpisodicInstancePanels
           instanceId={instanceId}
           inst={inst}
           onRefreshInstance={load}

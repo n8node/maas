@@ -19,13 +19,13 @@ import (
 )
 
 var (
-	ErrNotFound            = errors.New("instance not found")
-	ErrLimitReached        = errors.New("instance limit reached for your plan")
-	ErrInvalidType         = errors.New("memory type not allowed on your plan")
-	ErrEmptyContent        = errors.New("content must not be empty")
-	ErrEmptyQuery          = errors.New("query must not be empty")
-	ErrEmbeddingsDisabled  = errors.New("file ingestion requires embeddings and LLM API configuration on the server")
-	ErrGardenerNotAllowed  = errors.New("gardener is not enabled on your plan")
+	ErrNotFound           = errors.New("instance not found")
+	ErrLimitReached       = errors.New("instance limit reached for your plan")
+	ErrInvalidType        = errors.New("memory type not allowed on your plan")
+	ErrEmptyContent       = errors.New("content must not be empty")
+	ErrEmptyQuery         = errors.New("query must not be empty")
+	ErrEmbeddingsDisabled = errors.New("file ingestion requires embeddings and LLM API configuration on the server")
+	ErrGardenerNotAllowed = errors.New("gardener is not enabled on your plan")
 )
 
 const maxChunkRunes = 8000
@@ -177,6 +177,8 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput) 
 		allowed, err = s.planAllowsMemoryType(ctx, userID, "rag")
 	case "wiki":
 		allowed, err = s.planAllowsMemoryType(ctx, userID, "wiki")
+	case "episodic":
+		allowed, err = s.planAllowsMemoryType(ctx, userID, "episodic")
 	default:
 		return uuid.Nil, ErrInvalidType
 	}
@@ -289,9 +291,12 @@ func (s *Service) Delete(ctx context.Context, userID, id uuid.UUID) error {
 }
 
 type IngestInput struct {
-	Text        string
-	UserScope   *string
-	SourceLabel string
+	Text         string
+	UserScope    *string
+	SessionScope *string
+	ValidFrom    *time.Time
+	ValidUntil   *time.Time
+	SourceLabel  string
 	// Wiki: optional display title for the source (falls back to SourceLabel).
 	SourceTitle string
 	Concepts    []WikiConceptInput
@@ -315,6 +320,8 @@ func (s *Service) Ingest(ctx context.Context, userID, instanceID uuid.UUID, in I
 		return s.ingestRAG(ctx, userID, instanceID, in)
 	case "wiki":
 		return s.ingestWiki(ctx, userID, inst, in)
+	case "episodic":
+		return s.ingestEpisodic(ctx, userID, instanceID, inst, in)
 	default:
 		return nil, ErrInvalidType
 	}
@@ -391,10 +398,12 @@ type QueryResult struct {
 }
 
 type QueryInput struct {
-	Query      string
-	TopK       int
-	UserScope  *string
-	Synthesize *bool // nil or true: synthesize when chat is configured; false: citations only
+	Query        string
+	TopK         int
+	UserScope    *string
+	SessionScope *string
+	AsOf         *time.Time
+	Synthesize   *bool // nil or true: synthesize when chat is configured; false: citations only
 }
 
 func (s *Service) Query(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {
@@ -407,6 +416,8 @@ func (s *Service) Query(ctx context.Context, userID, instanceID uuid.UUID, in Qu
 		return s.queryRAG(ctx, userID, instanceID, in)
 	case "wiki":
 		return s.queryWiki(ctx, userID, instanceID, in)
+	case "episodic":
+		return s.queryEpisodic(ctx, userID, instanceID, inst, in)
 	default:
 		return nil, ErrInvalidType
 	}
@@ -573,12 +584,12 @@ func (s *Service) queryRAG(ctx context.Context, userID, instanceID uuid.UUID, in
 
 func InstanceToJSON(m models.MemoryInstance) map[string]any {
 	return map[string]any{
-		"id":           m.ID.String(),
-		"name":         m.Name,
-		"memory_type":  m.MemoryType,
-		"status":       m.Status,
-		"config":       m.Config,
-		"created_at":   m.CreatedAt.UTC().Format(time.RFC3339Nano),
-		"updated_at":   m.UpdatedAt.UTC().Format(time.RFC3339Nano),
+		"id":          m.ID.String(),
+		"name":        m.Name,
+		"memory_type": m.MemoryType,
+		"status":      m.Status,
+		"config":      m.Config,
+		"created_at":  m.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"updated_at":  m.UpdatedAt.UTC().Format(time.RFC3339Nano),
 	}
 }

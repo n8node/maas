@@ -184,10 +184,13 @@ func (h *Instances) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 type ingestBody struct {
-	Text        string `json:"text"`
+	Text        string  `json:"text"`
 	UserID      *string `json:"user_id"`
-	SourceLabel string `json:"source_label"`
-	SourceTitle string `json:"source_title"`
+	SessionID   *string `json:"session_id"`
+	ValidFrom   *string `json:"valid_from"`
+	ValidUntil  *string `json:"valid_until"`
+	SourceLabel string  `json:"source_label"`
+	SourceTitle string  `json:"source_title"`
 	Concepts    []struct {
 		Title       string `json:"title"`
 		Description string `json:"description"`
@@ -218,12 +221,25 @@ func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
 	for _, c := range body.Concepts {
 		concepts = append(concepts, memory.WikiConceptInput{Title: c.Title, Description: c.Description})
 	}
+	validFrom, err := parseOptionalTimestamp(body.ValidFrom)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid valid_from timestamp")
+		return
+	}
+	validUntil, err := parseOptionalTimestamp(body.ValidUntil)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid valid_until timestamp")
+		return
+	}
 	res, err := h.svc.Ingest(r.Context(), p.UserID, id, memory.IngestInput{
-		Text:        body.Text,
-		UserScope:   body.UserID,
-		SourceLabel: body.SourceLabel,
-		SourceTitle: body.SourceTitle,
-		Concepts:    concepts,
+		Text:         body.Text,
+		UserScope:    body.UserID,
+		SessionScope: body.SessionID,
+		ValidFrom:    validFrom,
+		ValidUntil:   validUntil,
+		SourceLabel:  body.SourceLabel,
+		SourceTitle:  body.SourceTitle,
+		Concepts:     concepts,
 	})
 	if errors.Is(err, billing.ErrTokensExhausted) {
 		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
@@ -247,7 +263,7 @@ func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
-			"chunks_added":           res.ChunksAdded,
+			"chunks_added":         res.ChunksAdded,
 			"tokens_consumed":      res.TokensConsumed,
 			"wiki_concepts_added":  res.WikiConceptsAdded,
 			"wiki_extraction_note": res.WikiExtractionNote,
@@ -259,6 +275,8 @@ type queryBody struct {
 	Query      string  `json:"query"`
 	TopK       int     `json:"top_k"`
 	UserID     *string `json:"user_id"`
+	SessionID  *string `json:"session_id"`
+	AsOf       *string `json:"as_of"`
 	Synthesize *bool   `json:"synthesize"` // omit or true = LLM answer when configured; false = citations only
 }
 
@@ -282,11 +300,18 @@ func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "INVALID_JSON", "invalid json body")
 		return
 	}
+	asOf, err := parseOptionalTimestamp(body.AsOf)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid as_of timestamp")
+		return
+	}
 	res, err := h.svc.Query(r.Context(), p.UserID, id, memory.QueryInput{
-		Query:      body.Query,
-		TopK:       body.TopK,
-		UserScope:  body.UserID,
-		Synthesize: body.Synthesize,
+		Query:        body.Query,
+		TopK:         body.TopK,
+		UserScope:    body.UserID,
+		SessionScope: body.SessionID,
+		AsOf:         asOf,
+		Synthesize:   body.Synthesize,
 	})
 	if errors.Is(err, billing.ErrTokensExhausted) {
 		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
@@ -309,15 +334,97 @@ func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{
-		"message":      res.Message,
-		"citations":    res.Citations,
-		"tokens_used":  res.TokensUsed,
-		"synthesized":  res.Synthesized,
+		"message":     res.Message,
+		"citations":   res.Citations,
+		"tokens_used": res.TokensUsed,
+		"synthesized": res.Synthesized,
 	}
 	if len(res.WikiRelatedConcepts) > 0 {
 		data["wiki_related_concepts"] = res.WikiRelatedConcepts
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"data": data})
+}
+
+func (h *Instances) EpisodicStats(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	inst, err := h.svc.Get(r.Context(), p.UserID, id)
+	if err != nil {
+		if errors.Is(err, memory.ErrNotFound) {
+			WriteError(w, http.StatusNotFound, "NOT_FOUND", "instance not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	if inst.MemoryType != "episodic" {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "operation requires episodic memory instance")
+		return
+	}
+	stats, err := h.svc.EpisodicStats(r.Context(), p.UserID, id)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": stats})
+}
+
+func (h *Instances) ListEpisodicEpisodes(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	var userScope *string
+	if v := strings.TrimSpace(r.URL.Query().Get("user_id")); v != "" {
+		userScope = &v
+	}
+	limit := 100
+	if v := strings.TrimSpace(r.URL.Query().Get("limit")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n > 0 {
+			limit = n
+		}
+	}
+	inst, err := h.svc.Get(r.Context(), p.UserID, id)
+	if err != nil {
+		if errors.Is(err, memory.ErrNotFound) {
+			WriteError(w, http.StatusNotFound, "NOT_FOUND", "instance not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	if inst.MemoryType != "episodic" {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "operation requires episodic memory instance")
+		return
+	}
+	list, err := h.svc.ListEpisodicEpisodes(r.Context(), p.UserID, id, userScope, limit)
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"episodes": list}})
 }
 
 func (h *Instances) IngestFile(w http.ResponseWriter, r *http.Request) {
@@ -390,7 +497,7 @@ func (h *Instances) IngestFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
-		"source_id":              res.SourceID.String(),
+		"source_id":            res.SourceID.String(),
 		"chunks_added":         res.ChunksAdded,
 		"tokens_consumed":      res.TokensConsumed,
 		"embedding_model":      res.EmbeddingModel,
@@ -485,15 +592,15 @@ func (h *Instances) DeleteSource(w http.ResponseWriter, r *http.Request) {
 
 func ragSourceToJSON(s models.RAGSource) map[string]any {
 	return map[string]any{
-		"id":               s.ID.String(),
-		"instance_id":      s.InstanceID.String(),
-		"filename":         s.Filename,
-		"byte_size":        s.ByteSize,
-		"mime_type":        s.MimeType,
-		"embedding_model":  s.EmbeddingModel,
-		"tokens_total":     s.TokensTotal,
-		"chunk_count":      s.ChunkCount,
-		"created_at":       s.CreatedAt.UTC().Format(time.RFC3339Nano),
+		"id":              s.ID.String(),
+		"instance_id":     s.InstanceID.String(),
+		"filename":        s.Filename,
+		"byte_size":       s.ByteSize,
+		"mime_type":       s.MimeType,
+		"embedding_model": s.EmbeddingModel,
+		"tokens_total":    s.TokensTotal,
+		"chunk_count":     s.ChunkCount,
+		"created_at":      s.CreatedAt.UTC().Format(time.RFC3339Nano),
 	}
 }
 
@@ -537,11 +644,11 @@ func (h *Instances) ListSourceChunks(w http.ResponseWriter, r *http.Request) {
 	out := make([]map[string]any, 0, len(rows))
 	for _, c := range rows {
 		m := map[string]any{
-			"id":              c.ID.String(),
-			"content":         c.Content,
-			"token_estimate":  c.TokenEstimate,
-			"created_at":      c.CreatedAt.UTC().Format(time.RFC3339Nano),
-			"ordinal":         c.Ordinal,
+			"id":             c.ID.String(),
+			"content":        c.Content,
+			"token_estimate": c.TokenEstimate,
+			"created_at":     c.CreatedAt.UTC().Format(time.RFC3339Nano),
+			"ordinal":        c.Ordinal,
 		}
 		if len(c.Embedding) > 0 {
 			m["embedding"] = c.Embedding
@@ -583,4 +690,23 @@ func (h *Instances) DeleteChunk(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+func parseOptionalTimestamp(raw *string) (*time.Time, error) {
+	if raw == nil {
+		return nil, nil
+	}
+	v := strings.TrimSpace(*raw)
+	if v == "" {
+		return nil, nil
+	}
+	if t, err := time.Parse(time.RFC3339, v); err == nil {
+		tt := t.UTC()
+		return &tt, nil
+	}
+	if t, err := time.Parse("2006-01-02", v); err == nil {
+		tt := t.UTC()
+		return &tt, nil
+	}
+	return nil, errors.New("invalid timestamp")
 }

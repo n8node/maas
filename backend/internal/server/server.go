@@ -12,8 +12,8 @@ import (
 	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/config"
 	"github.com/n8node/maas/backend/internal/handler"
-	appmw "github.com/n8node/maas/backend/internal/middleware"
 	"github.com/n8node/maas/backend/internal/memory"
+	appmw "github.com/n8node/maas/backend/internal/middleware"
 	"github.com/n8node/maas/backend/internal/openrouter"
 	"github.com/n8node/maas/backend/internal/repository"
 )
@@ -111,6 +111,8 @@ func New(opts Options) http.Handler {
 			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/dismiss", wikiH.DismissProposal)
 			r.Get("/{id}/rag/stats", ragH.Stats)
 			r.Get("/{id}/rag/topics", ragH.Topics)
+			r.Get("/{id}/episodic/stats", instH.EpisodicStats)
+			r.Get("/{id}/episodic/episodes", instH.ListEpisodicEpisodes)
 			r.Get("/{id}", instH.Get)
 			r.Patch("/{id}", instH.Patch)
 			r.Delete("/{id}", instH.Delete)

@@ -41,7 +41,7 @@ const wikiAccentBg = "#eeedfe";
 const MEMORY_PILLS = [
   { id: "rag", label: "RAG", href: "/instances/new?type=rag", col: "#185fa5", bg: "#e6f1fb", soon: false },
   { id: "wiki", label: "Wiki", href: "#", col: "#534ab7", bg: "#eeedfe", soon: false },
-  { id: "episodic", label: "Episodic", href: "#", col: "#3b6d11", bg: "#eaf3de", soon: true },
+  { id: "episodic", label: "Episodic", href: "/instances/new?type=episodic", col: "#3b6d11", bg: "#eaf3de", soon: false },
   { id: "working", label: "Working", href: "#", col: "#854f0b", bg: "#faeeda", soon: true },
   { id: "graph", label: "Graph", href: "#", col: "#993c1d", bg: "#faece7", soon: true },
   { id: "reflective", label: "Reflective", href: "#", col: "#993556", bg: "#fbeaf0", soon: true },

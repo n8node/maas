@@ -359,6 +359,9 @@ export async function ingestInstance(
   body: {
     text: string;
     user_id?: string;
+    session_id?: string;
+    valid_from?: string;
+    valid_until?: string;
     source_label?: string;
     source_title?: string;
     concepts?: Array<{ title: string; description: string }>;
@@ -390,7 +393,7 @@ export type QueryResultDTO = {
 export async function queryInstance(
   token: string,
   id: string,
-  body: { query: string; top_k?: number; user_id?: string; synthesize?: boolean },
+  body: { query: string; top_k?: number; user_id?: string; session_id?: string; as_of?: string; synthesize?: boolean },
 ): Promise<QueryResultDTO> {
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}/query`, {
     method: "POST",
@@ -433,6 +436,58 @@ export async function queryInstance(
     synthesized,
     wiki_related_concepts,
   };
+}
+
+export type EpisodicStatsDTO = {
+  episodes_count: number;
+  avg_decay: number;
+  users_count: number;
+  oldest_entry?: string;
+  coverage: number;
+};
+
+export type EpisodicEpisodeDTO = {
+  id: string;
+  content: string;
+  user_scope?: string;
+  session_scope?: string;
+  decay_weight: number;
+  valid_from?: string;
+  valid_until?: string;
+  created_at: string;
+};
+
+export async function getEpisodicStats(token: string, instanceId: string): Promise<EpisodicStatsDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/episodic/stats`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: EpisodicStatsDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load episodic stats");
+  }
+  return data.data;
+}
+
+export async function listEpisodicEpisodes(
+  token: string,
+  instanceId: string,
+  opts?: { user_id?: string; limit?: number },
+): Promise<EpisodicEpisodeDTO[]> {
+  const sp = new URLSearchParams();
+  if (opts?.user_id) sp.set("user_id", opts.user_id);
+  if (typeof opts?.limit === "number" && opts.limit > 0) sp.set("limit", String(Math.floor(opts.limit)));
+  const qs = sp.toString();
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/episodic/episodes${qs ? `?${qs}` : ""}`,
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  const data = (await parseJson(res)) as { data: { episodes: EpisodicEpisodeDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load episodes");
+  }
+  return data.data.episodes;
 }
 
 export type WikiHealthDTO = {
