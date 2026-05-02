@@ -240,3 +240,116 @@ export async function adminDeletePlan(token: string, id: string): Promise<void> 
     throw new Error(data.error?.message ?? "Could not delete plan");
   }
 }
+
+export type MemoryInstanceDTO = {
+  id: string;
+  name: string;
+  memory_type: string;
+  status: string;
+  config: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function listInstances(token: string): Promise<MemoryInstanceDTO[]> {
+  const res = await fetch(`${API_BASE}/instances`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { instances: MemoryInstanceDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load instances");
+  }
+  return data.data.instances;
+}
+
+export async function createInstance(
+  token: string,
+  body: { name: string; memory_type: string; config?: Record<string, unknown> },
+): Promise<string> {
+  const res = await fetch(`${API_BASE}/instances`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await parseJson(res)) as { data: { id: string } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not create instance");
+  }
+  return data.data.id;
+}
+
+export async function getInstance(token: string, id: string): Promise<MemoryInstanceDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { instance: MemoryInstanceDTO } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load instance");
+  }
+  return data.data.instance;
+}
+
+export async function deleteInstance(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not delete instance");
+  }
+}
+
+export type IngestResultDTO = {
+  chunks_added: number;
+  tokens_consumed: number;
+};
+
+export async function ingestInstance(
+  token: string,
+  id: string,
+  body: { text: string; user_id?: string; source_label?: string },
+): Promise<IngestResultDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}/ingest`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await parseJson(res)) as { data: IngestResultDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Ingest failed");
+  }
+  return data.data;
+}
+
+export type QueryResultDTO = {
+  message: string;
+  citations: Array<{ chunk_id: string; snippet: string; score: number }>;
+  tokens_used: number;
+};
+
+export async function queryInstance(
+  token: string,
+  id: string,
+  body: { query: string; top_k?: number; user_id?: string },
+): Promise<QueryResultDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await parseJson(res)) as { data: QueryResultDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Query failed");
+  }
+  return data.data;
+}

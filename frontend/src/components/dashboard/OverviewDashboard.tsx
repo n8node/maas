@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-import { billingMeRequest, type BillingMeData, type MeUser } from "@/lib/api";
+import { billingMeRequest, listInstances, type BillingMeData, type MeUser } from "@/lib/api";
 import { formatRub, formatStorageGb, formatTokens } from "@/lib/format";
 import { getToken } from "@/lib/token";
 
@@ -25,8 +25,7 @@ function planUsageBarClass(pct: number): string {
   return "bg-success";
 }
 
-/** Until ingest/instance APIs exist. */
-const INSTANCE_COUNT_PLACEHOLDER = 0;
+/** Until storage API exists. */
 const STORAGE_USED_MB_PLACEHOLDER = 0;
 
 type Props = {
@@ -36,6 +35,7 @@ type Props = {
 
 export function OverviewDashboard({ user, onLogout }: Props) {
   const token = getToken() ?? "";
+  const [instanceCount, setInstanceCount] = useState(0);
   const [billing, setBilling] = useState<BillingMeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -48,6 +48,12 @@ export function OverviewDashboard({ user, onLogout }: Props) {
       setBilling(b);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not load usage");
+    }
+    try {
+      const inst = await listInstances(token);
+      setInstanceCount(inst.length);
+    } catch {
+      setInstanceCount(0);
     } finally {
       setLoading(false);
     }
@@ -85,7 +91,7 @@ export function OverviewDashboard({ user, onLogout }: Props) {
       <DashboardSidebar
         userEmail={user.email}
         planLabel={planLabel}
-        instanceCount={INSTANCE_COUNT_PLACEHOLDER}
+        instanceCount={instanceCount}
         isSuperadmin={isSuperadmin}
         onLogout={onLogout}
       />
@@ -102,14 +108,13 @@ export function OverviewDashboard({ user, onLogout }: Props) {
               <BookOpen className="h-3.5 w-3.5 text-muted" strokeWidth={1.75} aria-hidden />
               Docs
             </button>
-            <button
-              type="button"
-              title="Coming soon"
-              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12px] font-medium text-bg opacity-80"
+            <Link
+              href="/instances/new"
+              className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12px] font-medium text-bg hover:opacity-90"
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
               New instance
-            </button>
+            </Link>
           </div>
         </header>
 
@@ -194,16 +199,14 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                   <div className="rounded-lg border border-border bg-bg p-4">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Instances</div>
                     <div className="mt-1 text-2xl font-medium tracking-tight text-ink">
-                      {INSTANCE_COUNT_PLACEHOLDER} / {instancesDisplayCap}
+                      {instanceCount} / {instancesDisplayCap}
                     </div>
-                    <p className="mt-1 text-[12px] text-subtle">No instances created yet</p>
-                    <button
-                      type="button"
-                      title="Coming soon"
-                      className="mt-3 cursor-not-allowed text-[12px] font-medium text-accent opacity-60"
-                    >
+                    <p className="mt-1 text-[12px] text-subtle">
+                      {instanceCount === 0 ? "No instances created yet" : `${instanceCount} active`}
+                    </p>
+                    <Link href="/instances/new" className="mt-3 inline-block text-[12px] font-medium text-accent hover:underline">
                       Create first →
-                    </button>
+                    </Link>
                   </div>
 
                   <div className="rounded-lg border border-border bg-bg p-4">
@@ -233,15 +236,21 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                   <span className="cursor-not-allowed rounded-full border border-border2 px-4 py-2 text-[12px] text-subtle">
                     API Keys
                   </span>
-                  <span className="cursor-not-allowed rounded-full border border-border2 px-4 py-2 text-[12px] text-subtle">
+                  <Link
+                    href="/instances/new"
+                    className="rounded-full border border-border2 px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2"
+                  >
                     New instance
-                  </span>
+                  </Link>
                   <span className="cursor-not-allowed rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-subtle">
                     Docs (soon)
                   </span>
-                  <span className="cursor-not-allowed rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-subtle">
-                    Playground (soon)
-                  </span>
+                  <Link
+                    href="/instances"
+                    className="rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-ink hover:bg-bg"
+                  >
+                    Playground
+                  </Link>
                 </div>
               </section>
 
@@ -276,17 +285,22 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                       </div>
                     </li>
                     <li className="flex gap-3">
-                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border2 bg-bg2 text-[11px] font-medium text-ink">
-                        3
+                      <div
+                        className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-medium text-ink ${
+                          instanceCount > 0 ? "bg-success text-bg" : "border border-border2 bg-bg2"
+                        }`}
+                        aria-hidden
+                      >
+                        {instanceCount > 0 ? <Check className="h-4 w-4" strokeWidth={2.5} /> : "3"}
                       </div>
                       <div>
                         <div className="text-[13px] font-medium text-ink">Create a memory instance</div>
                         <p className="mt-0.5 text-[12px] text-muted">
-                          Spin up RAG, Wiki, or other memory types for your product. Takes about 30 seconds.
+                          Spin up RAG or other memory types for your product.
                         </p>
-                        <span className="mt-1.5 inline-block cursor-not-allowed text-[12px] font-medium text-accent opacity-50">
+                        <Link href="/instances/new" className="mt-1.5 inline-block text-[12px] font-medium text-accent hover:underline">
                           Create instance →
-                        </span>
+                        </Link>
                       </div>
                     </li>
                     <li className="flex gap-3">
@@ -308,7 +322,7 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                       <div>
                         <div className="text-[13px] font-medium text-ink">Ingest &amp; query</div>
                         <p className="mt-0.5 text-[12px] text-muted">
-                          Use the playground to add data and run queries with citations from your agent. Playground coming soon.
+                          Use an instance playground to add data and run queries with citations.
                         </p>
                       </div>
                     </li>

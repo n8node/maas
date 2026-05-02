@@ -48,6 +48,7 @@ export function DashboardSidebar({
   const pathname = usePathname();
   const homeActive = pathname === "/";
   const billingActive = pathname === "/billing";
+  const instancesActive = pathname === "/instances" || pathname.startsWith("/instances/");
 
   return (
     <aside className="fixed left-0 top-0 z-20 flex h-screen w-[220px] shrink-0 flex-col border-r border-border bg-bg">
@@ -65,12 +66,18 @@ export function DashboardSidebar({
         >
           Overview
         </Link>
-        <span className="mt-1 flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
+        <Link
+          href="/instances"
+          className={clsx(
+            "mt-1 flex items-center gap-2 rounded-md px-3 py-[7px] text-muted no-underline hover:bg-bg2 hover:text-ink",
+            instancesActive && "bg-bg2 font-medium text-ink",
+          )}
+        >
           Instances
           <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-bg px-1.5 text-[10px] font-semibold text-accent">
             {instanceCount}
           </span>
-        </span>
+        </Link>
         <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           Agents
           <BadgeSoon />

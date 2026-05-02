@@ -12,6 +12,7 @@ import (
 	"github.com/n8node/maas/backend/internal/config"
 	"github.com/n8node/maas/backend/internal/handler"
 	appmw "github.com/n8node/maas/backend/internal/middleware"
+	"github.com/n8node/maas/backend/internal/memory"
 	"github.com/n8node/maas/backend/internal/repository"
 )
 
@@ -46,6 +47,8 @@ func New(opts Options) http.Handler {
 	keysH := handler.NewAPIKeys(opts.Config, keyRepo)
 	billH := handler.NewBilling(bill)
 	billAdm := handler.NewBillingAdmin(bill)
+	memSvc := memory.NewService(opts.Pool, bill)
+	instH := handler.NewInstances(memSvc)
 	authDeps := appmw.AuthDeps{Cfg: opts.Config, Users: userRepo, Keys: keyRepo}
 	authRoute := appmw.Authenticate(authDeps)
 
@@ -68,6 +71,16 @@ func New(opts Options) http.Handler {
 		r.With(authRoute).Post("/billing/subscribe", billH.Subscribe)
 		r.With(authRoute).Post("/billing/cancel", billH.Cancel)
 		r.With(authRoute).Post("/billing/consume", billH.Consume)
+
+		r.With(authRoute).Route("/instances", func(r chi.Router) {
+			r.Get("/", instH.List)
+			r.Post("/", instH.Create)
+			r.Get("/{id}", instH.Get)
+			r.Patch("/{id}", instH.Patch)
+			r.Delete("/{id}", instH.Delete)
+			r.Post("/{id}/ingest", instH.Ingest)
+			r.Post("/{id}/query", instH.Query)
+		})
 
 		r.With(authRoute, appmw.RequireSuperAdmin).Get("/admin/ping", handler.AdminPing)
 

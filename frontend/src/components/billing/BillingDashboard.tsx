@@ -8,6 +8,7 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import {
   billingMeRequest,
   cancelSubscription,
+  listInstances,
   listPlans,
   listTokenPackages,
   subscribePlan,
@@ -80,6 +81,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
   const [billing, setBilling] = useState<BillingMeData | null>(null);
   const [plans, setPlans] = useState<PlanDTO[]>([]);
   const [packages, setPackages] = useState<TokenPackageDTO[]>([]);
+  const [instanceCount, setInstanceCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
@@ -106,6 +108,12 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
       setBilling(b);
       setPlans(p.sort((a, b) => a.sort_order - b.sort_order));
       setPackages(pk.sort((a, b) => a.sort_order - b.sort_order));
+      try {
+        const inst = await listInstances(token);
+        setInstanceCount(inst.length);
+      } catch {
+        setInstanceCount(0);
+      }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load billing");
     } finally {
@@ -196,7 +204,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
         <DashboardSidebar
           userEmail={user.email}
           planLabel={planLabel}
-          instanceCount={0}
+          instanceCount={instanceCount}
           isSuperadmin={user.role === "superadmin"}
           onLogout={onLogout}
         />
@@ -213,7 +221,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
         <DashboardSidebar
           userEmail={user.email}
           planLabel={planLabel}
-          instanceCount={0}
+          instanceCount={instanceCount}
           isSuperadmin={user.role === "superadmin"}
           onLogout={onLogout}
         />
@@ -232,7 +240,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
       <DashboardSidebar
           userEmail={user.email}
           planLabel={planLabel}
-          instanceCount={0}
+          instanceCount={instanceCount}
           isSuperadmin={user.role === "superadmin"}
           onLogout={onLogout}
         />
