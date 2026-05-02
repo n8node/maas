@@ -182,7 +182,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const isEpisodicWizard = memoryType === "episodic" && requestedType === "episodic";
+  const isEpisodicWizard = memoryType === "episodic";
   const stepLabels = isEpisodicWizard ? EPISODIC_STEP_LABELS : STANDARD_STEP_LABELS;
   const maxStep = stepLabels.length;
   const decayRateDaily = useMemo(() => decayRate / 100, [decayRate]);
@@ -366,6 +366,13 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   }
 
   const typeMeta = MEMORY_TYPES.find((t) => t.id === memoryType)!;
+
+  function planAllowsMemoryType(id: MemoryKind): boolean {
+    const allowed = billing?.plan?.allowed_memory_types;
+    if (!billing?.plan || !allowed || allowed.length === 0) return true;
+    return allowed.includes(id);
+  }
+
   const planLine =
     billing?.plan != null
       ? `${billing.plan.name} (${instanceTotal}/${billing.plan.max_instances} instances)`
@@ -434,16 +441,24 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 <h1 className="text-base font-medium tracking-tight text-ink">Choose memory type</h1>
                 <p className="mt-1 text-[13px] text-muted">Select the type of memory that fits your use case.</p>
                 <div className="mt-7 grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-                  {MEMORY_TYPES.filter((t) => t.id !== "episodic").map((t) => {
+                  {MEMORY_TYPES.map((t) => {
                     const sel = memoryType === t.id;
+                    const allowed = planAllowsMemoryType(t.id);
                     return (
                       <button
                         key={t.id}
                         type="button"
-                        onClick={() => setMemoryType(t.id)}
+                        disabled={!allowed}
+                        title={!allowed ? "Not included in your current plan" : undefined}
+                        onClick={() => {
+                          if (allowed) setMemoryType(t.id);
+                        }}
                         className={clsx(
                           "relative rounded-[12px] border bg-bg p-3.5 text-left transition-colors",
-                          sel ? "border-2 border-ink" : "border border-border hover:border-border2",
+                          !allowed && "cursor-not-allowed opacity-50",
+                          allowed && sel && "border-2 border-ink",
+                          allowed && !sel && "border border-border hover:border-border2",
+                          !allowed && "border border-border",
                         )}
                       >
                         <div
