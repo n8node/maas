@@ -422,7 +422,8 @@ export async function getWikiConcepts(token: string, instanceId: string, search?
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not list concepts");
   }
-  return data.data.concepts;
+  const concepts = data.data?.concepts;
+  return Array.isArray(concepts) ? concepts : [];
 }
 
 export type WikiActionLogEntryDTO = {
@@ -444,7 +445,8 @@ export async function getWikiActionLog(token: string, instanceId: string): Promi
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load action log");
   }
-  return data.data.entries;
+  const entries = data.data?.entries;
+  return Array.isArray(entries) ? entries : [];
 }
 
 export type WikiProposalDTO = {
@@ -465,7 +467,8 @@ export async function getWikiProposals(token: string, instanceId: string, status
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load proposals");
   }
-  return data.data.proposals;
+  const proposals = data.data?.proposals;
+  return Array.isArray(proposals) ? proposals : [];
 }
 
 export async function postWikiGardenerTriage(token: string, instanceId: string): Promise<{ proposals_added: number }> {

@@ -54,7 +54,7 @@ function formatRelativeTime(iso: string): string {
 }
 
 function actionVisual(action: string): { dot: string; chipBg: string; chipText: string } {
-  const a = action.toLowerCase();
+  const a = (action ?? "").toLowerCase();
   if (a.includes("create")) return { dot: "#639922", chipBg: "#eaf3de", chipText: "#3b6d11" };
   if (a.includes("attach")) return { dot: "#185fa5", chipBg: "#e6f1fb", chipText: "#185fa5" };
   if (a.includes("refine")) return { dot: "#534ab7", chipBg: "#eeedfe", chipText: "#534ab7" };
@@ -101,6 +101,13 @@ function payloadTitle(payload: Record<string, unknown>): string | undefined {
   const t0 = payload.titles;
   if (Array.isArray(t0) && t0.length && typeof t0[0] === "string") return String(t0[0]);
   return undefined;
+}
+
+/** Filenames queued in create-instance wizard (stored in instance config). */
+function readWizardQueuedFiles(cfg: Record<string, unknown>): string[] {
+  const q = cfg.wizard_queued_files;
+  if (!Array.isArray(q)) return [];
+  return q.filter((x): x is string => typeof x === "string" && x.length > 0);
 }
 
 export function WikiInstancePanels({
@@ -300,10 +307,12 @@ export function WikiInstancePanels({
     }
   }
 
+  const wizardQueuedFiles = useMemo(() => readWizardQueuedFiles(inst.config ?? {}), [inst.config]);
+
   const filteredConcepts = useMemo(() => {
-    return concepts.filter((c) => {
+    return (concepts ?? []).filter((c) => {
       if (conceptFilter === "all") return true;
-      const s = c.state.toLowerCase();
+      const s = (c.state ?? "").toLowerCase();
       if (conceptFilter === "active") return s === "active";
       return s === "stale" || s === "weak" || s === "disputed";
     });
@@ -321,7 +330,7 @@ export function WikiInstancePanels({
   ];
 
   return (
-    <div className="flex flex-1 flex-col bg-bg3">
+    <div className="flex min-h-0 flex-1 flex-col bg-bg3">
       {/* Memory kind pills */}
       <div className="border-b border-border bg-bg px-7 py-3">
         <div className="flex flex-wrap gap-2">
@@ -434,8 +443,8 @@ export function WikiInstancePanels({
         />
       </div>
 
-      <div className="border-b border-border bg-bg px-7">
-        <nav className="flex flex-wrap gap-1 pt-1">
+      <div className="relative z-20 border-b border-border bg-bg px-7">
+        <nav className="flex flex-wrap gap-1 pt-1" aria-label="Wiki sections">
           {tabs.map(([id, label]) => (
             <button
               key={id}
@@ -452,7 +461,7 @@ export function WikiInstancePanels({
         </nav>
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="relative z-0 flex min-h-0 flex-1 overflow-y-auto">
         {tab === "playground" ? (
           <div className="grid gap-6 p-7 lg:grid-cols-2 lg:gap-8">
             <section className="rounded-[12px] border border-border bg-bg p-5">
@@ -505,11 +514,37 @@ export function WikiInstancePanels({
 
               <div className="mt-6 border-t border-border pt-4">
                 <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Extraction preview</div>
+                {wizardQueuedFiles.length > 0 ? (
+                  <div className="mt-3 rounded-lg border border-border bg-bg2 px-3 py-2.5">
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Files from create wizard</div>
+                    <p className="mt-1 text-[11px] text-muted">
+                      Names are saved with the instance; upload or ingest is not automatic for wiki text pipeline yet.
+                    </p>
+                    <ul className="mt-2 space-y-1.5">
+                      {wizardQueuedFiles.map((name) => (
+                        <li
+                          key={name}
+                          className="flex items-center gap-2 text-[12px] text-ink"
+                        >
+                          <span className="text-subtle" aria-hidden>
+                            ▸
+                          </span>
+                          <span className="min-w-0 truncate font-mono text-[12px]">{name}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ) : null}
                 <ul className="mt-3 space-y-2">
-                  {previewConcepts.length === 0 ? (
+                  {previewConcepts.length === 0 && wizardQueuedFiles.length === 0 ? (
                     <li className="text-[12px] text-muted">No concepts yet — ingest text or enable auto-extract.</li>
-                  ) : (
-                    previewConcepts.map((c) => (
+                  ) : null}
+                  {previewConcepts.length === 0 && wizardQueuedFiles.length > 0 ? (
+                    <li className="text-[12px] text-muted">No extracted concepts yet — run ingest above.</li>
+                  ) : null}
+                  {previewConcepts.map((c) => {
+                    const conf = Number(c.confidence ?? 0);
+                    return (
                       <li
                         key={c.id}
                         className="flex items-start gap-3 rounded-lg border border-border bg-bg3 px-3 py-2 text-[12px]"
@@ -517,23 +552,24 @@ export function WikiInstancePanels({
                         <span
                           className="mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-medium uppercase"
                           style={{
-                            background:
-                              c.state === "active" ? "#eaf3de" : "#f3f2ef",
+                            background: c.state === "active" ? "#eaf3de" : "#f3f2ef",
                             color: c.state === "active" ? "#3b6d11" : "#5f5e5a",
                           }}
                         >
-                          {c.state === "active" ? "create" : c.state}
+                          {c.state === "active" ? "create" : (c.state ?? "—")}
                         </span>
                         <div className="min-w-0 flex-1">
-                          <div className="font-medium text-ink">{c.title}</div>
+                          <div className="font-medium text-ink">{c.title ?? "Untitled"}</div>
                           <div className="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-muted">
-                            <span className={clsx("rounded px-1.5 py-0.5", typeBadgeClass(c.concept_type))}>{c.concept_type}</span>
-                            <span>{c.confidence.toFixed(2)}</span>
+                            <span className={clsx("rounded px-1.5 py-0.5", typeBadgeClass(c.concept_type ?? "fact"))}>
+                              {c.concept_type ?? "—"}
+                            </span>
+                            <span>{conf.toFixed(2)}</span>
                           </div>
                         </div>
                       </li>
-                    ))
-                  )}
+                    );
+                  })}
                 </ul>
               </div>
             </section>
@@ -667,22 +703,24 @@ export function WikiInstancePanels({
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredConcepts.map((c) => (
+                  {filteredConcepts.map((c) => {
+                    const conf = Number(c.confidence ?? 0);
+                    return (
                     <tr key={c.id} className="border-b border-border last:border-0">
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span className={clsx("h-2 w-2 shrink-0 rounded-full", typeDotClass(c.concept_type))} aria-hidden />
-                          <span className="font-medium text-ink">{c.title}</span>
+                          <span className={clsx("h-2 w-2 shrink-0 rounded-full", typeDotClass(c.concept_type ?? ""))} aria-hidden />
+                          <span className="font-medium text-ink">{c.title ?? "—"}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("inline-block rounded-full px-2 py-0.5 text-[11px] font-medium", typeBadgeClass(c.concept_type))}>
-                          {c.concept_type}
+                        <span className={clsx("inline-block rounded-full px-2 py-0.5 text-[11px] font-medium", typeBadgeClass(c.concept_type ?? ""))}>
+                          {c.concept_type ?? "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        <span className={clsx("inline-block rounded-full px-2 py-0.5 text-[11px] font-medium", stateBadgeClass(c.state))}>
-                          {c.state}
+                        <span className={clsx("inline-block rounded-full px-2 py-0.5 text-[11px] font-medium", stateBadgeClass(c.state ?? ""))}>
+                          {c.state ?? "—"}
                         </span>
                       </td>
                       <td className="px-4 py-3">
@@ -691,17 +729,17 @@ export function WikiInstancePanels({
                             <div
                               className={clsx(
                                 "h-full rounded-full",
-                                c.confidence >= 0.7 ? "bg-[#534ab7]" : c.confidence >= 0.4 ? "bg-[#185fa5]" : "bg-[#a32d2d]",
+                                conf >= 0.7 ? "bg-[#534ab7]" : conf >= 0.4 ? "bg-[#185fa5]" : "bg-[#a32d2d]",
                               )}
-                              style={{ width: `${Math.round(c.confidence * 100)}%` }}
+                              style={{ width: `${Math.round(Math.min(1, Math.max(0, conf)) * 100)}%` }}
                             />
                           </div>
-                          <span className="text-[12px] text-muted">{c.confidence.toFixed(2)}</span>
+                          <span className="text-[12px] text-muted">{conf.toFixed(2)}</span>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-muted">—</td>
                     </tr>
-                  ))}
+                  );})}
                 </tbody>
               </table>
               {filteredConcepts.length === 0 ? (
@@ -714,10 +752,11 @@ export function WikiInstancePanels({
         {tab === "actionlog" ? (
           <div className="rounded-[12px] border border-border bg-bg mx-7 my-7">
             {actions.map((a, idx) => {
-              const vis = actionVisual(a.action);
+              const pl = (a.payload ?? {}) as Record<string, unknown>;
+              const vis = actionVisual(a.action ?? "");
               const titleLine =
-                (typeof a.payload?.concept_title === "string" && a.payload.concept_title) ||
-                payloadTitle(a.payload as Record<string, unknown>) ||
+                (typeof pl.concept_title === "string" && pl.concept_title) ||
+                payloadTitle(pl) ||
                 a.target_kind ||
                 "Entry";
               return (
@@ -735,7 +774,7 @@ export function WikiInstancePanels({
                         className="rounded px-2 py-0.5 text-[11px] font-medium capitalize"
                         style={{ backgroundColor: vis.chipBg, color: vis.chipText }}
                       >
-                        {a.action}
+                        {a.action ?? "—"}
                       </span>
                       <span className="text-[13px] font-medium text-ink">{titleLine}</span>
                     </div>
@@ -746,7 +785,8 @@ export function WikiInstancePanels({
                       </p>
                     )}
                     <p className="mt-2 text-[11px] text-subtle">
-                      worker:{a.actor === "system" ? "route" : a.actor} · {formatRelativeTime(a.created_at)}
+                      worker:{a.actor === "system" ? "route" : (a.actor ?? "system")} ·{" "}
+                      {a.created_at ? formatRelativeTime(a.created_at) : "—"}
                     </p>
                   </div>
                 </div>
