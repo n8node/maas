@@ -21,6 +21,13 @@ type MemoryKind = "rag" | "wiki" | "episodic";
 
 const STANDARD_STEP_LABELS = ["Memory type", "Configuration", "Ingest & sources", "Confirm & create"] as const;
 const EPISODIC_STEP_LABELS = ["Basics", "Decay", "Bi-temporal", "Scoping", "Review & create"] as const;
+const EPISODIC_STEP_HINTS = [
+  "Name & description",
+  "Forgetting curve settings",
+  "Time tracking for bots",
+  "user_id & session_id",
+  "Confirm and launch",
+] as const;
 
 const MEMORY_TYPES: Array<{
   id: MemoryKind;
@@ -79,19 +86,46 @@ const EPISODIC_RETENTION_OPTIONS = [
 const EPISODIC_SECTION_TITLE =
   "mb-3 border-b border-border pb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle";
 
-function episodicUseCaseLabel(id: "coach" | "support" | "personal"): string {
-  if (id === "coach") return "AI Coach / Therapist";
-  if (id === "support") return "Support Agent";
-  return "Personal Assistant";
-}
-
 function episodicDecayColor(weight: number): string {
   if (weight >= 0.5) return "#3b6d11";
   if (weight >= 0.2) return "#ba7517";
   return "#d3d1c7";
 }
 
-function StepDot({ done, active, n }: { done: boolean; active: boolean; n: number }) {
+function StepDot({
+  done,
+  active,
+  n,
+  variant = "default",
+}: {
+  done: boolean;
+  active: boolean;
+  n: number;
+  variant?: "default" | "episodic";
+}) {
+  if (variant === "episodic") {
+    if (done) {
+      return (
+        <div className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#3b6d11] text-white">
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
+            <polyline points="1,4 3,6 7,2" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        </div>
+      );
+    }
+    if (active) {
+      return (
+        <div className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#3b6d11] text-[10px] font-medium text-white">
+          {n}
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-border bg-bg text-[10px] font-medium text-subtle">
+        {n}
+      </div>
+    );
+  }
   if (done) {
     return (
       <div className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full border border-ink bg-ink text-bg">
@@ -113,7 +147,17 @@ function StepDot({ done, active, n }: { done: boolean; active: boolean; n: numbe
   );
 }
 
-function Toggle({ on, onToggle, id }: { on: boolean; onToggle: () => void; id: string }) {
+function Toggle({
+  on,
+  onToggle,
+  id,
+  accent = "ink",
+}: {
+  on: boolean;
+  onToggle: () => void;
+  id: string;
+  accent?: "ink" | "episodic";
+}) {
   return (
     <button
       id={id}
@@ -121,7 +165,10 @@ function Toggle({ on, onToggle, id }: { on: boolean; onToggle: () => void; id: s
       role="switch"
       aria-checked={on}
       onClick={onToggle}
-      className={clsx("relative h-[18px] w-8 shrink-0 rounded-full transition-colors", on ? "bg-ink" : "bg-border2")}
+      className={clsx(
+        "relative h-[18px] w-8 shrink-0 rounded-full transition-colors",
+        on ? (accent === "episodic" ? "bg-[#3b6d11]" : "bg-ink") : "bg-border2",
+      )}
     >
       <span
         className={clsx(
@@ -155,11 +202,10 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const [episodicDescription, setEpisodicDescription] = useState(
     "Chronological memory for AI coaching sessions. Stores user conversations, mood check-ins, and progress notes per user.",
   );
-  const [episodicUseCase, setEpisodicUseCase] = useState<"coach" | "support" | "personal">("coach");
-  const [decayRate, setDecayRate] = useState(14);
+  const [decayRate, setDecayRate] = useState(5);
   const [decayWorkerEnabled, setDecayWorkerEnabled] = useState(true);
   const [decaySchedule, setDecaySchedule] = useState<string>(EPISODIC_DECAY_SCHEDULES[0]);
-  const [retrievalThreshold, setRetrievalThreshold] = useState(12);
+  const [retrievalThreshold, setRetrievalThreshold] = useState(10);
   const [biTemporalEnabled, setBiTemporalEnabled] = useState(true);
   const [pointInTimeEnabled, setPointInTimeEnabled] = useState(true);
   const [invalidationMode, setInvalidationMode] =
@@ -190,9 +236,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const maxStep = stepLabels.length;
   const decayRateDaily = useMemo(() => decayRate / 100, [decayRate]);
   const decayHalfLifeDays = useMemo(() => Math.round(Math.log(2) / Math.max(decayRateDaily, 0.0001)), [decayRateDaily]);
+  /** 12 bars from day 0 → 90 (matches mock). */
   const decayBars = useMemo(() => {
-    const days = [0, 1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60, 90];
-    return days.map((day) => {
+    const n = 12;
+    const maxDay = 90;
+    return Array.from({ length: n }, (_, i) => {
+      const day = Math.round((i * maxDay) / (n - 1));
       const weight = Math.exp(-decayRateDaily * day);
       return {
         day,
@@ -228,7 +277,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     if (memoryType === "episodic") {
       return {
         description: episodicDescription.trim() || undefined,
-        use_case: episodicUseCase,
         decay: {
           daily_factor: Number(decayRateDaily.toFixed(2)),
           auto_worker: decayWorkerEnabled,
@@ -273,7 +321,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     decayWorkerEnabled,
     episodicDescription,
     episodicRetention,
-    episodicUseCase,
     gardenerEnabled,
     gardenerSchedule,
     gdprDeletionEnabled,
@@ -404,7 +451,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     >
       <div className="flex min-h-0 flex-1">
         {/* Setup steps — design/03-create-instance.html */}
-        <aside className="w-[200px] shrink-0 border-r border-border bg-bg px-4 py-6">
+        <aside
+          className={clsx(
+            "shrink-0 border-r border-border bg-bg px-4 py-6",
+            isEpisodicWizard ? "w-[220px]" : "w-[200px]",
+          )}
+        >
           <div className="mb-4 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle">Setup steps</div>
           <ul className="space-y-0">
             {stepLabels.map((label, i) => {
@@ -412,6 +464,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               const done = step > n;
               const active = step === n;
               const isLast = i === stepLabels.length - 1;
+              const dotVariant = isEpisodicWizard ? "episodic" : "default";
               return (
                 <li key={label} className={clsx("relative flex gap-2.5", !isLast ? "pb-6" : "")}>
                   {!isLast ? (
@@ -420,14 +473,21 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       aria-hidden
                     />
                   ) : null}
-                  <StepDot done={done} active={active} n={n} />
-                  <span
-                    className={clsx(
-                      "max-w-[130px] pt-[3px] text-[12px] leading-snug",
-                      active ? "font-medium text-ink" : done ? "text-muted" : "text-subtle",
-                    )}
-                  >
-                    {label}
+                  <StepDot done={done} active={active} n={n} variant={dotVariant} />
+                  <span className="flex min-w-0 flex-1 flex-col pt-[3px]">
+                    <span
+                      className={clsx(
+                        "max-w-[148px] text-[12px] leading-snug",
+                        active ? "font-medium text-ink" : done ? "text-muted" : "text-subtle",
+                      )}
+                    >
+                      {label}
+                    </span>
+                    {isEpisodicWizard && EPISODIC_STEP_HINTS[i] ? (
+                      <span className="mt-0.5 max-w-[148px] text-[10px] leading-snug text-subtle">
+                        {EPISODIC_STEP_HINTS[i]}
+                      </span>
+                    ) : null}
                   </span>
                 </li>
               );
@@ -525,51 +585,21 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     </div>
                   </div>
                 </section>
-
-                <section className="mt-6">
-                  <h2 className={EPISODIC_SECTION_TITLE}>Use case preview</h2>
-                  <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
-                    {(
-                      [
-                        ["coach", "AI Coach / Therapist", "Track sessions, mood and long-term progress."],
-                        ["support", "Support Agent", "Remember past tickets and user complaints."],
-                        ["personal", "Personal Assistant", "Keep conversation history and preferences."],
-                      ] as const
-                    ).map(([id, title, desc]) => {
-                      const selected = episodicUseCase === id;
-                      return (
-                        <button
-                          key={id}
-                          type="button"
-                          onClick={() => setEpisodicUseCase(id)}
-                          className={clsx(
-                            "rounded-[12px] border p-3.5 text-left transition-colors",
-                            selected
-                              ? "border-2 border-[#3b6d11] bg-[#eaf3de]"
-                              : "border border-border bg-bg2 hover:border-border2",
-                          )}
-                        >
-                          <div className="text-[13px] font-medium text-ink">{title}</div>
-                          <p className="mt-1 text-[11px] leading-snug text-subtle">{desc}</p>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </section>
               </>
             ) : null}
 
             {isEpisodicWizard && step === 2 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">How fast should old memories fade?</h1>
-                <p className="mt-1 text-[13px] text-muted">
-                  Decay reduces retrieval weight for older episodes. Recent episodes surface first; old ones stay queryable.
+                <p className="mt-1 text-[13px] leading-relaxed text-muted">
+                  Decay gradually reduces the retrieval weight of older episodes. Recent episodes surface first; distant
+                  ones fade but aren&apos;t deleted — they can still be found with direct queries.
                 </p>
 
                 <section className="mt-6">
                   <h2 className={EPISODIC_SECTION_TITLE}>Decay rate</h2>
-                  <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
-                    <span>Daily decay factor</span>
+                  <p className="mb-2 text-[12px] text-muted">Daily decay factor — how much weight is lost each day</p>
+                  <div className="mb-1 flex items-center justify-end text-[12px] text-muted">
                     <span className="font-medium text-[#3b6d11]">{decayRateDaily.toFixed(2)} / day</span>
                   </div>
                   <input
@@ -578,7 +608,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     max={30}
                     value={decayRate}
                     onChange={(e) => setDecayRate(Number(e.target.value))}
-                    className="w-full accent-[#3b6d11]"
+                    className="w-full cursor-pointer accent-[#3b6d11]"
                   />
                   <div className="mt-1 flex justify-between text-[10px] text-subtle">
                     <span>Slow (0.01)</span>
@@ -586,42 +616,67 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     <span>Fast (0.30)</span>
                   </div>
 
-                  <div className="mt-3 rounded-[12px] border border-border bg-bg px-4 py-3">
-                    <div className="mb-2.5 flex items-center justify-between text-[11px] text-muted">
-                      <span>Decay preview — weight over time</span>
-                      <span>Half-life: ~{decayHalfLifeDays} days</span>
+                  <div
+                    className="mt-4 rounded-[12px] border border-border bg-bg3 px-4 py-3 shadow-[inset_0_1px_2px_rgba(0,0,0,0.04)]"
+                  >
+                    <div className="mb-2.5 flex items-start justify-between gap-2 text-[11px] text-muted">
+                      <span>Decay preview — weight of an episode over time</span>
+                      <span className="shrink-0 whitespace-nowrap font-medium text-[#3b6d11]">
+                        Half-life: ~{decayHalfLifeDays} days
+                      </span>
                     </div>
-                    <div className="mb-2 flex h-[64px] items-end gap-1">
+                    <div className="mb-3 flex h-[64px] items-end gap-[3px]">
                       {decayBars.map((bar) => (
                         <div
                           key={bar.day}
                           title={`Day ${bar.day}: ${bar.weight.toFixed(2)}`}
-                          className="min-w-[5px] flex-1 rounded-t-sm transition-all duration-200 ease-out"
+                          className="min-w-0 flex-1 rounded-t-sm transition-all duration-200 ease-out"
                           style={{
                             height: `${bar.height}px`,
                             backgroundColor: bar.color,
-                            opacity: 0.4 + bar.weight * 0.6,
+                            opacity: 0.45 + bar.weight * 0.55,
                           }}
                         />
                       ))}
                     </div>
-                    <div className="flex justify-between text-[9px] text-subtle">
+                    <div className="mb-3 flex justify-between text-[9px] font-medium text-subtle">
                       <span>Today</span>
                       <span>1 week</span>
                       <span>1 month</span>
                       <span>3 months</span>
+                    </div>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1.5 border-t border-border pt-2.5 text-[10px] text-muted">
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#3b6d11]" aria-hidden />
+                        Active — weight ≥ 0.5
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#ba7517]" aria-hidden />
+                        Fading — weight 0.2–0.5
+                      </span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <span className="h-2 w-2 shrink-0 rounded-full bg-[#d3d1c7]" aria-hidden />
+                        Dim — weight &lt; 0.2
+                      </span>
                     </div>
                   </div>
                 </section>
 
                 <section className="mt-6">
                   <h2 className={EPISODIC_SECTION_TITLE}>Decay schedule</h2>
-                  <div className="flex items-center justify-between border-b border-border py-2">
-                    <div>
-                      <div className="text-[13px] text-ink">Automatic decay worker</div>
-                      <div className="text-[11px] text-subtle">Runs periodically to recalculate episode weights.</div>
+                  <div className="flex items-center justify-between border-b border-border py-2.5">
+                    <div className="pr-3">
+                      <div className="text-[13px] font-medium text-ink">Automatic decay worker</div>
+                      <div className="mt-0.5 text-[11px] leading-snug text-subtle">
+                        Runs on schedule to recalculate weights. Without this, decay is applied lazily at query time only.
+                      </div>
                     </div>
-                    <Toggle id="episodic-decay-auto" on={decayWorkerEnabled} onToggle={() => setDecayWorkerEnabled((v) => !v)} />
+                    <Toggle
+                      id="episodic-decay-auto"
+                      accent="episodic"
+                      on={decayWorkerEnabled}
+                      onToggle={() => setDecayWorkerEnabled((v) => !v)}
+                    />
                   </div>
                   <div className="mt-3">
                     <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-schedule">
@@ -629,7 +684,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     </label>
                     <select
                       id="episodic-schedule"
-                      className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px]"
+                      className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px] outline-none focus:border-[#3b6d11]"
                       value={decaySchedule}
                       onChange={(e) => setDecaySchedule(e.target.value)}
                     >
@@ -644,19 +699,44 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
                 <section className="mt-6">
                   <h2 className={EPISODIC_SECTION_TITLE}>Retrieval threshold</h2>
-                  <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
-                    <span>Minimum weight in results</span>
-                    <span className="font-medium text-[#3b6d11]">weight ≥ {(retrievalThreshold / 100).toFixed(2)}</span>
+                  <p className="mb-2 text-[12px] text-muted">
+                    Minimum weight to include in results — episodes below this are dim but not deleted
+                  </p>
+                  <div className="mb-1 flex items-center justify-end text-[12px] text-muted">
+                    <span className="font-medium text-[#3b6d11]">
+                      weight ≥ {(retrievalThreshold / 100).toFixed(2)}
+                    </span>
                   </div>
                   <input
                     type="range"
                     min={1}
-                    max={40}
+                    max={50}
                     value={retrievalThreshold}
                     onChange={(e) => setRetrievalThreshold(Number(e.target.value))}
-                    className="w-full accent-[#3b6d11]"
+                    className="w-full cursor-pointer accent-[#3b6d11]"
                   />
+                  <div className="mt-1 flex justify-between text-[10px] text-subtle">
+                    <span className="max-w-[32%]">Include dim (0.01)</span>
+                    <span>Balanced (0.20)</span>
+                    <span className="max-w-[32%] text-right">Active only (0.50)</span>
+                  </div>
                 </section>
+
+                <div className="mt-6 flex gap-2.5 rounded-[12px] border border-[#e8d4b8] bg-[#faeeda] px-3.5 py-3 text-[12px] leading-snug text-[#633806]">
+                  <span className="mt-0.5 shrink-0 text-[#ba7517]" aria-hidden>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"
+                      />
+                    </svg>
+                  </span>
+                  <p>
+                    Episodes are <strong className="font-semibold">never deleted</strong> by decay — they become dim. You
+                    can always retrieve them directly by episode ID or with a point-in-time query.
+                  </p>
+                </div>
               </>
             ) : null}
 
@@ -787,7 +867,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     [
                       ["Memory type", "Episodic"],
                       ["Name", name.trim() || "—"],
-                      ["Use case", episodicUseCaseLabel(episodicUseCase)],
                       ["Decay rate", `${decayRateDaily.toFixed(2)} / day · ~${decayHalfLifeDays} days half-life`],
                       ["Decay worker", decayWorkerEnabled ? decaySchedule : "Disabled"],
                       ["Bi-temporal facts", biTemporalEnabled ? "Enabled" : "Disabled"],
@@ -1165,25 +1244,35 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 disabled={step === 1}
                 className="rounded-lg border border-border2 bg-transparent px-4 py-2 text-[13px] text-muted hover:bg-bg2 disabled:pointer-events-none disabled:opacity-40"
               >
-                Back
+                {isEpisodicWizard ? "← Back" : "Back"}
               </button>
               {step < maxStep ? (
                 <button
                   type="button"
                   onClick={goNext}
                   disabled={!canContinue()}
-                  className="rounded-lg bg-ink px-[18px] py-2 text-[13px] font-medium text-bg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={clsx(
+                    "rounded-lg px-[18px] py-2 text-[13px] font-medium hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                    isEpisodicWizard
+                      ? "bg-[#3b6d11] text-white"
+                      : "bg-ink text-bg",
+                  )}
                 >
-                  Continue
+                  {isEpisodicWizard ? "Continue →" : "Continue"}
                 </button>
               ) : (
                 <button
                   type="button"
                   onClick={() => void onCreate()}
                   disabled={saving || !name.trim()}
-                  className="rounded-lg bg-ink px-[18px] py-2 text-[13px] font-medium text-bg hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
+                  className={clsx(
+                    "rounded-lg px-[18px] py-2 text-[13px] font-medium hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
+                    isEpisodicWizard
+                      ? "bg-[#3b6d11] text-white"
+                      : "bg-ink text-bg",
+                  )}
                 >
-                  {saving ? "Creating…" : "Create instance"}
+                  {saving ? "Creating…" : isEpisodicWizard ? "Create instance →" : "Create instance"}
                 </button>
               )}
             </div>
