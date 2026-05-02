@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,15 +82,16 @@ func (s *Service) ListWikiSources(ctx context.Context, userID, instanceID uuid.U
 
 // WikiConceptRow for list/detail API.
 type WikiConceptRow struct {
-	ID           uuid.UUID `json:"id"`
-	Title        string    `json:"title"`
-	Description  string    `json:"description"`
-	ConceptType  string    `json:"concept_type"`
-	State        string    `json:"state"`
-	Confidence   float64   `json:"confidence"`
+	ID           uuid.UUID  `json:"id"`
+	Title        string     `json:"title"`
+	Description  string     `json:"description"`
+	ConceptType  string     `json:"concept_type"`
+	State        string     `json:"state"`
+	Confidence   float64    `json:"confidence"`
 	SourceID     *uuid.UUID `json:"source_id,omitempty"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	SourceTitle  *string    `json:"source_title,omitempty"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
 }
 
 func (s *Service) ListWikiConcepts(ctx context.Context, userID, instanceID uuid.UUID, search string, limit int) ([]WikiConceptRow, error) {
@@ -104,16 +106,20 @@ func (s *Service) ListWikiConcepts(ctx context.Context, userID, instanceID uuid.
 	var err error
 	if search == "" {
 		rows, err = s.pool.Query(ctx, `
-			SELECT id, title, description, concept_type, state, confidence, source_id, created_at, updated_at
-			FROM wiki_concepts WHERE instance_id = $1 ORDER BY updated_at DESC LIMIT $2`,
+			SELECT c.id, c.title, c.description, c.concept_type, c.state, c.confidence, c.source_id, src.title, c.created_at, c.updated_at
+			FROM wiki_concepts c
+			LEFT JOIN wiki_sources src ON src.id = c.source_id
+			WHERE c.instance_id = $1
+			ORDER BY c.updated_at DESC LIMIT $2`,
 			instanceID, limit)
 	} else {
 		pat := "%" + search + "%"
 		rows, err = s.pool.Query(ctx, `
-			SELECT id, title, description, concept_type, state, confidence, source_id, created_at, updated_at
-			FROM wiki_concepts
-			WHERE instance_id = $1 AND (title ILIKE $2 OR description ILIKE $2)
-			ORDER BY updated_at DESC LIMIT $3`,
+			SELECT c.id, c.title, c.description, c.concept_type, c.state, c.confidence, c.source_id, src.title, c.created_at, c.updated_at
+			FROM wiki_concepts c
+			LEFT JOIN wiki_sources src ON src.id = c.source_id
+			WHERE c.instance_id = $1 AND (c.title ILIKE $2 OR c.description ILIKE $2)
+			ORDER BY c.updated_at DESC LIMIT $3`,
 			instanceID, pat, limit)
 	}
 	if err != nil {
@@ -129,11 +135,16 @@ func scanWikiConceptRows(rows pgx.Rows) ([]WikiConceptRow, error) {
 		var r WikiConceptRow
 		var src *uuid.UUID
 		var conf float64
-		if err := rows.Scan(&r.ID, &r.Title, &r.Description, &r.ConceptType, &r.State, &conf, &src, &r.CreatedAt, &r.UpdatedAt); err != nil {
+		var srcTitle sql.NullString
+		if err := rows.Scan(&r.ID, &r.Title, &r.Description, &r.ConceptType, &r.State, &conf, &src, &srcTitle, &r.CreatedAt, &r.UpdatedAt); err != nil {
 			return nil, err
 		}
 		r.Confidence = conf
 		r.SourceID = src
+		if srcTitle.Valid && strings.TrimSpace(srcTitle.String) != "" {
+			t := strings.TrimSpace(srcTitle.String)
+			r.SourceTitle = &t
+		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
@@ -146,10 +157,13 @@ func (s *Service) GetWikiConcept(ctx context.Context, userID, instanceID, concep
 	var r WikiConceptRow
 	var src *uuid.UUID
 	var conf float64
+	var srcTitle sql.NullString
 	err := s.pool.QueryRow(ctx, `
-		SELECT id, title, description, concept_type, state, confidence, source_id, created_at, updated_at
-		FROM wiki_concepts WHERE instance_id = $1 AND id = $2`,
-		instanceID, conceptID).Scan(&r.ID, &r.Title, &r.Description, &r.ConceptType, &r.State, &conf, &src, &r.CreatedAt, &r.UpdatedAt)
+		SELECT c.id, c.title, c.description, c.concept_type, c.state, c.confidence, c.source_id, src.title, c.created_at, c.updated_at
+		FROM wiki_concepts c
+		LEFT JOIN wiki_sources src ON src.id = c.source_id
+		WHERE c.instance_id = $1 AND c.id = $2`,
+		instanceID, conceptID).Scan(&r.ID, &r.Title, &r.Description, &r.ConceptType, &r.State, &conf, &src, &srcTitle, &r.CreatedAt, &r.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, ErrNotFound
 	}
@@ -158,10 +172,12 @@ func (s *Service) GetWikiConcept(ctx context.Context, userID, instanceID, concep
 	}
 	r.Confidence = conf
 	r.SourceID = src
+	if srcTitle.Valid && strings.TrimSpace(srcTitle.String) != "" {
+		t := strings.TrimSpace(srcTitle.String)
+		r.SourceTitle = &t
+	}
 	return &r, nil
 }
-
-type PatchWikiConceptInput struct {
 	State       *string
 	Description *string
 }

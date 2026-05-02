@@ -813,7 +813,15 @@ export function WikiInstancePanels({
                           <span className="text-[12px] text-muted">{conf.toFixed(2)}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-muted">—</td>
+                      <td className="max-w-[min(280px,40vw)] px-4 py-3 align-top">
+                        {c.source_title?.trim() ? (
+                          <span className="line-clamp-3 text-[12px] leading-snug text-ink" title={c.source_title}>
+                            {c.source_title}
+                          </span>
+                        ) : (
+                          <span className="text-muted">—</span>
+                        )}
+                      </td>
                     </tr>
                   );})}
                 </tbody>

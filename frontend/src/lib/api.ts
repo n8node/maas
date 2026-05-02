@@ -419,6 +419,8 @@ export type WikiConceptDTO = {
   state: string;
   confidence: number;
   source_id?: string;
+  /** Wiki source document title (evidence lineage). */
+  source_title?: string;
   created_at: string;
   updated_at: string;
 };
