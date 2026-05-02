@@ -849,3 +849,143 @@ export async function deleteInstanceChunk(
     throw new Error(data.error?.message ?? "Could not delete chunk");
   }
 }
+
+// --- Working memory (session key-value)
+
+export type WorkingStatsDTO = {
+  sessions_total: number;
+  sessions_active: number;
+  keys_total: number;
+  default_ttl_minutes: number;
+  default_ttl_label: string;
+  max_ttl_label: string;
+  hit_rate_pct?: number | null;
+  storage_used_bytes: number;
+  max_storage_mb: number;
+};
+
+export type WorkingSessionRowDTO = {
+  session_id: string;
+  scope_user_id: string;
+  key_count: number;
+  last_active_at: string;
+  status: string;
+};
+
+export type WorkingKeyRowDTO = {
+  key: string;
+  value: unknown;
+  expires_at?: string | null;
+  is_core: boolean;
+  scope_user_id: string;
+};
+
+export async function getWorkingStats(token: string, instanceId: string): Promise<WorkingStatsDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/stats`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: WorkingStatsDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load stats");
+  }
+  return data.data;
+}
+
+export async function listWorkingSessions(
+  token: string,
+  instanceId: string,
+  opts?: { q?: string; filter?: "active" | "all" },
+): Promise<WorkingSessionRowDTO[]> {
+  const p = new URLSearchParams();
+  if (opts?.q) p.set("q", opts.q);
+  if (opts?.filter) p.set("filter", opts.filter);
+  const qs = p.toString();
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/sessions${qs ? `?${qs}` : ""}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = (await parseJson(res)) as { data: { sessions: WorkingSessionRowDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not list sessions");
+  }
+  return data.data.sessions;
+}
+
+export async function listWorkingKeys(
+  token: string,
+  instanceId: string,
+  sessionId: string,
+  keyPrefix?: string,
+): Promise<WorkingKeyRowDTO[]> {
+  const p = new URLSearchParams();
+  if (keyPrefix) p.set("key_prefix", keyPrefix);
+  const qs = p.toString();
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/sessions/${encodeURIComponent(sessionId)}/keys${qs ? `?${qs}` : ""}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = (await parseJson(res)) as { data: { keys: WorkingKeyRowDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not list keys");
+  }
+  return data.data.keys;
+}
+
+export async function putWorkingKey(
+  token: string,
+  instanceId: string,
+  sessionId: string,
+  key: string,
+  body: { value: unknown; ttl_seconds?: number | null; scope_user_id?: string | null },
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/sessions/${encodeURIComponent(sessionId)}/keys/${encodeURIComponent(key)}`,
+    {
+      method: "PUT",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        value: body.value,
+        ttl_seconds: body.ttl_seconds ?? undefined,
+        scope_user_id: body.scope_user_id ?? undefined,
+      }),
+    },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not save key");
+  }
+}
+
+export async function deleteWorkingKey(
+  token: string,
+  instanceId: string,
+  sessionId: string,
+  key: string,
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/sessions/${encodeURIComponent(sessionId)}/keys/${encodeURIComponent(key)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not delete key");
+  }
+}
+
+export async function flushWorkingExpired(token: string, instanceId: string): Promise<number> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/flush-expired`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { deleted: number } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Flush failed");
+  }
+  return data.data.deleted;
+}

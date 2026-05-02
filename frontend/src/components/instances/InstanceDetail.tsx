@@ -8,6 +8,7 @@ import { InstancesShell } from "@/components/instances/InstancesShell";
 import { EpisodicInstancePanels } from "@/components/instances/EpisodicInstancePanels";
 import { RagInstancePanels } from "@/components/instances/RagInstancePanels";
 import { WikiInstancePanels } from "@/components/instances/WikiInstancePanels";
+import { WorkingInstancePanels } from "@/components/instances/WorkingInstancePanels";
 import { deleteInstance, getInstance, type MeUser, type MemoryInstanceDTO } from "@/lib/api";
 import { getToken } from "@/lib/token";
 
@@ -84,7 +85,8 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         : inst.memory_type === "episodic"
           ? "Episodic"
           : inst.memory_type.toUpperCase();
-  const fullBleed = isWiki || isRag || isEpisodic;
+  const isWorking = inst.memory_type === "working";
+  const fullBleed = isWiki || isRag || isEpisodic || isWorking;
 
   return (
     <InstancesShell
@@ -124,6 +126,13 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         />
       ) : isEpisodic ? (
         <EpisodicInstancePanels
+          instanceId={instanceId}
+          inst={inst}
+          onRefreshInstance={load}
+          onDeleteInstance={onDelete}
+        />
+      ) : isWorking ? (
+        <WorkingInstancePanels
           instanceId={instanceId}
           inst={inst}
           onRefreshInstance={load}
