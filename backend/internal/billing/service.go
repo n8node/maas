@@ -74,9 +74,62 @@ func (s *Service) EnsureWelcomeSubscription(ctx context.Context, userID uuid.UUI
 	return tx.Commit(ctx)
 }
 
+// reconcileActivePlanBucket ensures the active subscription has exactly one plan bucket whose
+// tokens_total matches plans.monthly_tokens (recovery after admin DB edits or missed inserts).
+func (s *Service) reconcileActivePlanBucket(ctx context.Context, userID uuid.UUID) error {
+	var subID uuid.UUID
+	var planMonthly int64
+	var periodEnd time.Time
+	err := s.pool.QueryRow(ctx, `
+		SELECT s.id, p.monthly_tokens, s.current_period_end
+		FROM subscriptions s
+		JOIN plans p ON p.id = s.plan_id
+		WHERE s.user_id = $1 AND s.status = 'active'
+		LIMIT 1`, userID).Scan(&subID, &planMonthly, &periodEnd)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+
+	var bucketID uuid.UUID
+	var tokTotal, tokUsed int64
+	err = s.pool.QueryRow(ctx, `
+		SELECT id, tokens_total, tokens_used FROM token_balances
+		WHERE user_id = $1 AND subscription_id = $2 AND bucket_type = 'plan'
+		ORDER BY created_at ASC
+		LIMIT 1`, userID, subID).Scan(&bucketID, &tokTotal, &tokUsed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		_, err = s.pool.Exec(ctx, `
+			INSERT INTO token_balances (user_id, bucket_type, subscription_id, tokens_total, tokens_used, expires_at)
+			VALUES ($1, 'plan', $2, $3, 0, $4)`,
+			userID, subID, planMonthly, periodEnd)
+		return err
+	}
+	if err != nil {
+		return err
+	}
+	if tokTotal == planMonthly && tokUsed <= tokTotal {
+		return nil
+	}
+	newUsed := tokUsed
+	if newUsed > planMonthly {
+		newUsed = planMonthly
+	}
+	_, err = s.pool.Exec(ctx, `
+		UPDATE token_balances SET tokens_total = $2, tokens_used = $3, expires_at = $4
+		WHERE id = $1`,
+		bucketID, planMonthly, newUsed, periodEnd)
+	return err
+}
+
 func (s *Service) ConsumeTokens(ctx context.Context, userID uuid.UUID, amount int64) error {
 	if amount <= 0 {
 		return fmt.Errorf("amount must be positive")
+	}
+	if err := s.reconcileActivePlanBucket(ctx, userID); err != nil {
+		return err
 	}
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
@@ -143,6 +196,9 @@ type BucketSummary struct {
 
 func (s *Service) GetSummary(ctx context.Context, userID uuid.UUID) (*Summary, error) {
 	_ = s.EnsureWelcomeSubscription(ctx, userID)
+	if err := s.reconcileActivePlanBucket(ctx, userID); err != nil {
+		return nil, err
+	}
 
 	var sub models.Subscription
 	var plan models.Plan
@@ -229,6 +285,15 @@ func (s *Service) Subscribe(ctx context.Context, userID uuid.UUID, in SubscribeI
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// Drop plan buckets tied to the subscription(s) we are about to cancel so limits always match the new plan row.
+	_, err = tx.Exec(ctx, `
+		DELETE FROM token_balances
+		WHERE bucket_type = 'plan'
+		  AND subscription_id IN (SELECT id FROM subscriptions WHERE user_id = $1 AND status = 'active')`,
+		userID)
+	if err != nil {
+		return err
+	}
 	_, err = tx.Exec(ctx, `
 		UPDATE subscriptions SET status = 'canceled', updated_at = now()
 		WHERE user_id = $1 AND status = 'active'`, userID)
