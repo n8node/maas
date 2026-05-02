@@ -813,14 +813,24 @@ export function WikiInstancePanels({
                           <span className="text-[12px] text-muted">{conf.toFixed(2)}</span>
                         </div>
                       </td>
-                      <td className="max-w-[min(280px,40vw)] px-4 py-3 align-top">
-                        {c.source_title?.trim() ? (
-                          <span className="line-clamp-3 text-[12px] leading-snug text-ink" title={c.source_title}>
-                            {c.source_title}
-                          </span>
-                        ) : (
-                          <span className="text-muted">—</span>
-                        )}
+                      <td className="max-w-[min(320px,44vw)] px-4 py-3 align-top">
+                        <div className="flex flex-col gap-1">
+                          {c.source_title?.trim() ? (
+                            <span
+                              className="text-[12px] font-medium leading-snug text-ink line-clamp-1"
+                              title={c.source_title}
+                            >
+                              {c.source_title}
+                            </span>
+                          ) : (
+                            <span className="text-[12px] text-muted">—</span>
+                          )}
+                          {c.description?.trim() ? (
+                            <p className="line-clamp-3 text-[11px] leading-snug text-muted" title={c.description}>
+                              {c.description}
+                            </p>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );})}
