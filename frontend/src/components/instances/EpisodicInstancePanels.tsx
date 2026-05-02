@@ -74,8 +74,8 @@ function formatAgeNatural(iso: string): string {
   return `${mo} months old`;
 }
 
-function episodeShortId(raw: string): string {
-  const compact = raw.replace(/-/g, "");
+function episodeShortId(raw: unknown): string {
+  const compact = String(raw ?? "").replace(/-/g, "");
   const head = compact.slice(0, 6) || compact;
   return `ep_${head}`;
 }
@@ -201,14 +201,16 @@ export function EpisodicInstancePanels({
   }, [loadStats, loadEpisodes]);
 
   const displayedEpisodes = useMemo(() => {
+    const list = episodes ?? [];
     const q = episodesTextFilter.trim().toLowerCase();
-    if (!q) return episodes;
-    return episodes.filter((e) => e.content.toLowerCase().includes(q));
+    if (!q) return list;
+    return list.filter((e) => String(e.content ?? "").toLowerCase().includes(q));
   }, [episodes, episodesTextFilter]);
 
   const decayPreviewRows = useMemo(() => {
     const rate = decayDailyFactor;
-    const scored = episodes.map((ep) => ({
+    const list = episodes ?? [];
+    const scored = list.map((ep) => ({
       ep,
       eff: effectiveRetrievalWeight(ep.created_at, ep.decay_weight ?? 1, rate),
     }));
@@ -450,7 +452,11 @@ export function EpisodicInstancePanels({
         />
         <KpiCell
           label="Avg decay"
-          value={stats ? stats.avg_decay.toFixed(2) : "—"}
+          value={
+            stats != null && typeof stats.avg_decay === "number" && !Number.isNaN(stats.avg_decay)
+              ? stats.avg_decay.toFixed(2)
+              : "—"
+          }
           sub={`rate: ${decayDailyFactor.toFixed(2)}/day`}
         />
         <KpiCell label="Queries today" value={stats ? String(queriesToday) : "—"} sub={`${stats?.users_count ?? 0} users scoped`} />

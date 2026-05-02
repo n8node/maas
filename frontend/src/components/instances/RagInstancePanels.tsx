@@ -385,7 +385,7 @@ export function RagInstancePanels({
           value={stats?.chunk_count ?? "—"}
           sub={
             stats
-              ? `${stats.topic_cluster_count} topic${stats.topic_cluster_count === 1 ? "" : "s"} clustered`
+              ? `${Number(stats.topic_cluster_count ?? 0)} topic${Number(stats.topic_cluster_count ?? 0) === 1 ? "" : "s"} clustered`
               : undefined
           }
         />
@@ -706,7 +706,7 @@ export function RagInstancePanels({
                       <div className="min-w-0">
                         <h3 className="text-[14px] font-medium text-ink">{t.title}</h3>
                         <div className="mt-2 flex flex-wrap gap-1.5">
-                          {t.tags.map((tag) => (
+                          {(Array.isArray(t.tags) ? t.tags : []).map((tag) => (
                             <span
                               key={tag}
                               className="inline-block rounded-full border border-border bg-bg2 px-2 py-0.5 text-[11px] text-ink"
@@ -717,7 +717,8 @@ export function RagInstancePanels({
                         </div>
                       </div>
                       <div className="shrink-0 text-right text-[12px] text-muted">
-                        {t.chunk_count} chunks · score {t.score.toFixed(2)}
+                        {t.chunk_count} chunks · score{" "}
+                        {(typeof t.score === "number" && !Number.isNaN(t.score) ? t.score : 0).toFixed(2)}
                       </div>
                     </div>
                   </li>

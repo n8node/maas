@@ -43,11 +43,20 @@ export async function meRequest(token: string): Promise<MeUser> {
   const res = await fetch(`${API_BASE}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: { user: MeUser } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: { user?: unknown } } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Session expired");
   }
-  return data.data.user;
+  const u = data.data?.user;
+  if (!u || typeof u !== "object") {
+    throw new Error("Invalid session");
+  }
+  const o = u as Record<string, unknown>;
+  return {
+    id: String(o.id ?? ""),
+    email: typeof o.email === "string" ? o.email : "",
+    role: typeof o.role === "string" ? o.role : "user",
+  };
 }
 
 export type SubscriptionDTO = {
@@ -252,15 +261,45 @@ export type MemoryInstanceDTO = {
   updated_at: string;
 };
 
+function normalizeMemoryInstance(raw: unknown): MemoryInstanceDTO {
+  const now = new Date().toISOString();
+  const fallback = {
+    id: "",
+    name: "Untitled",
+    memory_type: "",
+    status: "active",
+    config: {} as Record<string, unknown>,
+    created_at: now,
+    updated_at: now,
+  };
+  if (!raw || typeof raw !== "object") return fallback;
+  const r = raw as Record<string, unknown>;
+  const cfg = r.config;
+  const config: Record<string, unknown> =
+    cfg != null && typeof cfg === "object" && !Array.isArray(cfg) ? (cfg as Record<string, unknown>) : {};
+  return {
+    id: String(r.id ?? ""),
+    name: String(r.name ?? "Untitled"),
+    memory_type: String(r.memory_type ?? "")
+      .toLowerCase()
+      .trim(),
+    status: String(r.status ?? "active"),
+    config,
+    created_at: String(r.created_at ?? now),
+    updated_at: String(r.updated_at ?? now),
+  };
+}
+
 export async function listInstances(token: string): Promise<MemoryInstanceDTO[]> {
   const res = await fetch(`${API_BASE}/instances`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: { instances: MemoryInstanceDTO[] } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: { instances?: unknown } } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load instances");
   }
-  return data.data.instances;
+  const rawList = data.data?.instances;
+  return Array.isArray(rawList) ? rawList.map(normalizeMemoryInstance) : [];
 }
 
 export async function createInstance(
@@ -294,20 +333,7 @@ export async function getInstance(token: string, id: string): Promise<MemoryInst
   if (!raw || typeof raw !== "object") {
     throw new Error("Invalid instance response");
   }
-  const cfg = raw.config;
-  const config: Record<string, unknown> =
-    cfg != null && typeof cfg === "object" && !Array.isArray(cfg) ? (cfg as Record<string, unknown>) : {};
-  return {
-    id: String(raw.id ?? ""),
-    name: String(raw.name ?? "Untitled"),
-    memory_type: String(raw.memory_type ?? "")
-      .toLowerCase()
-      .trim(),
-    status: String(raw.status ?? "active"),
-    config,
-    created_at: String(raw.created_at ?? new Date().toISOString()),
-    updated_at: String(raw.updated_at ?? new Date().toISOString()),
-  };
+  return normalizeMemoryInstance(raw);
 }
 
 export type RAGStatsDTO = {
@@ -333,11 +359,33 @@ export async function getRagStats(token: string, instanceId: string): Promise<RA
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/rag/stats`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: RAGStatsDTO } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: unknown } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load RAG stats");
   }
-  return data.data;
+  const d = data.data;
+  if (!d || typeof d !== "object") {
+    return {
+      chunk_count: 0,
+      source_count: 0,
+      topic_cluster_count: 0,
+      queries_today: 0,
+    };
+  }
+  const o = d as Record<string, unknown>;
+  return {
+    chunk_count: typeof o.chunk_count === "number" && !Number.isNaN(o.chunk_count) ? o.chunk_count : 0,
+    source_count: typeof o.source_count === "number" && !Number.isNaN(o.source_count) ? o.source_count : 0,
+    topic_cluster_count:
+      typeof o.topic_cluster_count === "number" && !Number.isNaN(o.topic_cluster_count) ? o.topic_cluster_count : 0,
+    last_ingest_at: typeof o.last_ingest_at === "string" ? o.last_ingest_at : undefined,
+    queries_today: typeof o.queries_today === "number" && !Number.isNaN(o.queries_today) ? o.queries_today : 0,
+    avg_topk_score: typeof o.avg_topk_score === "number" && !Number.isNaN(o.avg_topk_score) ? o.avg_topk_score : undefined,
+    coverage_percent:
+      typeof o.coverage_percent === "number" && !Number.isNaN(o.coverage_percent) ? o.coverage_percent : undefined,
+    high_conf_percent:
+      typeof o.high_conf_percent === "number" && !Number.isNaN(o.high_conf_percent) ? o.high_conf_percent : undefined,
+  };
 }
 
 export async function getRagTopics(token: string, instanceId: string): Promise<RAGTopicClusterDTO[]> {
@@ -349,7 +397,23 @@ export async function getRagTopics(token: string, instanceId: string): Promise<R
     throw new Error(data.error?.message ?? "Could not load topics");
   }
   const topics = data.data?.topics;
-  return Array.isArray(topics) ? topics : [];
+  const list = Array.isArray(topics) ? topics : [];
+  return list
+    .map((t): RAGTopicClusterDTO | null => {
+      if (!t || typeof t !== "object") return null;
+      const o = t as Record<string, unknown>;
+      const tagsRaw = o.tags;
+      const tags = Array.isArray(tagsRaw) ? tagsRaw.filter((x): x is string => typeof x === "string") : [];
+      const score = typeof o.score === "number" && !Number.isNaN(o.score) ? o.score : 0;
+      return {
+        id: String(o.id ?? ""),
+        title: typeof o.title === "string" ? o.title : String(o.title ?? ""),
+        tags,
+        chunk_count: typeof o.chunk_count === "number" && !Number.isNaN(o.chunk_count) ? o.chunk_count : 0,
+        score,
+      };
+    })
+    .filter((x): x is RAGTopicClusterDTO => x != null);
 }
 
 export async function deleteInstance(token: string, id: string): Promise<void> {
@@ -481,11 +545,33 @@ export async function getEpisodicStats(token: string, instanceId: string): Promi
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/episodic/stats`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: EpisodicStatsDTO } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: unknown } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load episodic stats");
   }
-  return data.data;
+  const d = data.data;
+  if (!d || typeof d !== "object") {
+    return {
+      episodes_count: 0,
+      avg_decay: 0,
+      users_count: 0,
+      coverage: 0,
+      queries_today: 0,
+      history_months: 0,
+      anchored_pct: 0,
+    };
+  }
+  const o = d as Record<string, unknown>;
+  return {
+    episodes_count: typeof o.episodes_count === "number" && !Number.isNaN(o.episodes_count) ? o.episodes_count : 0,
+    avg_decay: typeof o.avg_decay === "number" && !Number.isNaN(o.avg_decay) ? o.avg_decay : 0,
+    users_count: typeof o.users_count === "number" && !Number.isNaN(o.users_count) ? o.users_count : 0,
+    oldest_entry: typeof o.oldest_entry === "string" ? o.oldest_entry : undefined,
+    coverage: typeof o.coverage === "number" && !Number.isNaN(o.coverage) ? o.coverage : 0,
+    queries_today: typeof o.queries_today === "number" && !Number.isNaN(o.queries_today) ? o.queries_today : 0,
+    history_months: typeof o.history_months === "number" && !Number.isNaN(o.history_months) ? o.history_months : 0,
+    anchored_pct: typeof o.anchored_pct === "number" && !Number.isNaN(o.anchored_pct) ? o.anchored_pct : 0,
+  };
 }
 
 export async function listEpisodicEpisodes(
@@ -503,11 +589,30 @@ export async function listEpisodicEpisodes(
       headers: { Authorization: `Bearer ${token}` },
     },
   );
-  const data = (await parseJson(res)) as { data: { episodes: EpisodicEpisodeDTO[] } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: { episodes?: unknown } } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load episodes");
   }
-  return data.data.episodes;
+  const eps = data.data?.episodes;
+  const list = Array.isArray(eps) ? eps : [];
+  return list
+    .map((e): EpisodicEpisodeDTO | null => {
+      if (!e || typeof e !== "object") return null;
+      const o = e as Record<string, unknown>;
+      const decay =
+        typeof o.decay_weight === "number" && !Number.isNaN(o.decay_weight) ? o.decay_weight : 1;
+      return {
+        id: String(o.id ?? ""),
+        content: typeof o.content === "string" ? o.content : "",
+        user_scope: typeof o.user_scope === "string" ? o.user_scope : undefined,
+        session_scope: typeof o.session_scope === "string" ? o.session_scope : undefined,
+        decay_weight: decay,
+        valid_from: typeof o.valid_from === "string" ? o.valid_from : undefined,
+        valid_until: typeof o.valid_until === "string" ? o.valid_until : undefined,
+        created_at: typeof o.created_at === "string" ? o.created_at : new Date(0).toISOString(),
+      };
+    })
+    .filter((x): x is EpisodicEpisodeDTO => x != null);
 }
 
 export type WikiHealthDTO = {
@@ -525,11 +630,40 @@ export async function getWikiHealth(token: string, instanceId: string): Promise<
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/health`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: WikiHealthDTO } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: unknown } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load wiki health");
   }
-  return data.data;
+  const d = data.data;
+  if (!d || typeof d !== "object") {
+    return {
+      coverage: 0,
+      purity: 0,
+      stale_ratio: 0,
+      segment_count: 0,
+      concept_count: 0,
+      source_count: 0,
+    };
+  }
+  const o = d as Record<string, unknown>;
+  const num = (key: string) =>
+    typeof o[key] === "number" && !Number.isNaN(o[key] as number) ? (o[key] as number) : 0;
+  return {
+    coverage: num("coverage"),
+    purity: num("purity"),
+    stale_ratio: num("stale_ratio"),
+    segment_count: num("segment_count"),
+    concept_count: num("concept_count"),
+    source_count: num("source_count"),
+    stale_concept_count:
+      typeof o.stale_concept_count === "number" && !Number.isNaN(o.stale_concept_count as number)
+        ? (o.stale_concept_count as number)
+        : undefined,
+    disputed_concept_count:
+      typeof o.disputed_concept_count === "number" && !Number.isNaN(o.disputed_concept_count as number)
+        ? (o.disputed_concept_count as number)
+        : undefined,
+  };
 }
 
 export type WikiSourceDTO = {
@@ -901,11 +1035,39 @@ export async function getWorkingStats(token: string, instanceId: string): Promis
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/stats`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: WorkingStatsDTO } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: unknown } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load stats");
   }
-  return data.data;
+  const d = data.data;
+  if (!d || typeof d !== "object") {
+    return {
+      sessions_total: 0,
+      sessions_active: 0,
+      keys_total: 0,
+      default_ttl_minutes: 0,
+      default_ttl_label: "—",
+      max_ttl_label: "—",
+      hit_rate_pct: null,
+      storage_used_bytes: 0,
+      max_storage_mb: 0,
+    };
+  }
+  const o = d as Record<string, unknown>;
+  const num = (key: string) =>
+    typeof o[key] === "number" && !Number.isNaN(o[key] as number) ? (o[key] as number) : 0;
+  const str = (key: string, fb: string) => (typeof o[key] === "string" ? (o[key] as string) : fb);
+  return {
+    sessions_total: num("sessions_total"),
+    sessions_active: num("sessions_active"),
+    keys_total: num("keys_total"),
+    default_ttl_minutes: num("default_ttl_minutes"),
+    default_ttl_label: str("default_ttl_label", "—"),
+    max_ttl_label: str("max_ttl_label", "—"),
+    hit_rate_pct: typeof o.hit_rate_pct === "number" && !Number.isNaN(o.hit_rate_pct as number) ? o.hit_rate_pct : null,
+    storage_used_bytes: num("storage_used_bytes"),
+    max_storage_mb: num("max_storage_mb"),
+  };
 }
 
 export async function listWorkingSessions(
@@ -921,11 +1083,12 @@ export async function listWorkingSessions(
     `${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/sessions${qs ? `?${qs}` : ""}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  const data = (await parseJson(res)) as { data: { sessions: WorkingSessionRowDTO[] } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: { sessions?: unknown } } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not list sessions");
   }
-  return data.data.sessions;
+  const rows = data.data?.sessions;
+  return Array.isArray(rows) ? (rows as WorkingSessionRowDTO[]) : [];
 }
 
 export async function listWorkingKeys(
@@ -941,11 +1104,12 @@ export async function listWorkingKeys(
     `${API_BASE}/instances/${encodeURIComponent(instanceId)}/working/sessions/${encodeURIComponent(sessionId)}/keys${qs ? `?${qs}` : ""}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
-  const data = (await parseJson(res)) as { data: { keys: WorkingKeyRowDTO[] } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: { keys?: unknown } } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not list keys");
   }
-  return data.data.keys;
+  const rows = data.data?.keys;
+  return Array.isArray(rows) ? (rows as WorkingKeyRowDTO[]) : [];
 }
 
 export async function putWorkingKey(
