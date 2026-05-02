@@ -66,6 +66,7 @@ func New(opts Options) http.Handler {
 	memSvc := memory.NewService(opts.Pool, bill, memOpts...)
 	instH := handler.NewInstances(memSvc)
 	wikiH := handler.NewWiki(memSvc)
+	ragH := handler.NewRag(memSvc)
 	authDeps := appmw.AuthDeps{Cfg: opts.Config, Users: userRepo, Keys: keyRepo}
 	authRoute := appmw.Authenticate(authDeps)
 
@@ -107,6 +108,8 @@ func New(opts Options) http.Handler {
 			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/approve", wikiH.ApproveProposal)
 			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/reject", wikiH.RejectProposal)
 			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/dismiss", wikiH.DismissProposal)
+			r.Get("/{id}/rag/stats", ragH.Stats)
+			r.Get("/{id}/rag/topics", ragH.Topics)
 			r.Get("/{id}", instH.Get)
 			r.Patch("/{id}", instH.Patch)
 			r.Delete("/{id}", instH.Delete)

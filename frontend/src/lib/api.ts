@@ -293,6 +293,48 @@ export async function getInstance(token: string, id: string): Promise<MemoryInst
   return data.data.instance;
 }
 
+export type RAGStatsDTO = {
+  chunk_count: number;
+  source_count: number;
+  topic_cluster_count: number;
+  last_ingest_at?: string;
+  queries_today: number;
+  avg_topk_score?: number;
+  coverage_percent?: number;
+  high_conf_percent?: number;
+};
+
+export type RAGTopicClusterDTO = {
+  id: string;
+  title: string;
+  tags: string[];
+  chunk_count: number;
+  score: number;
+};
+
+export async function getRagStats(token: string, instanceId: string): Promise<RAGStatsDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/rag/stats`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: RAGStatsDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load RAG stats");
+  }
+  return data.data;
+}
+
+export async function getRagTopics(token: string, instanceId: string): Promise<RAGTopicClusterDTO[]> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/rag/topics`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { topics: RAGTopicClusterDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load topics");
+  }
+  const topics = data.data?.topics;
+  return Array.isArray(topics) ? topics : [];
+}
+
 export async function deleteInstance(token: string, id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}`, {
     method: "DELETE",
