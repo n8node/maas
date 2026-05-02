@@ -214,6 +214,7 @@ type planBody struct {
 	MonthlyTokens      int64    `json:"monthly_tokens"`
 	MaxStorageMB       int64    `json:"max_storage_mb"`
 	AllowedMemoryTypes []string `json:"allowed_memory_types"`
+	GardenerEnabled    bool     `json:"gardener_enabled"`
 	SortOrder          int      `json:"sort_order"`
 	IsPublic           bool     `json:"is_public"`
 	IsArchived         bool     `json:"is_archived"`
@@ -235,7 +236,8 @@ func (a *BillingAdmin) CreatePlan(w http.ResponseWriter, r *http.Request) {
 	id, err := a.svc.AdminCreatePlan(r.Context(), billing.PlanUpsert{
 		Name: body.Name, Slug: body.Slug, PriceMonthlyRUB: body.PriceMonthlyRUB, PriceYearlyRUB: body.PriceYearlyRUB,
 		MaxInstances: body.MaxInstances, MonthlyTokens: body.MonthlyTokens, MaxStorageMB: body.MaxStorageMB,
-		AllowedMemoryTypes: body.AllowedMemoryTypes, SortOrder: body.SortOrder, IsPublic: body.IsPublic, IsArchived: body.IsArchived,
+		AllowedMemoryTypes: body.AllowedMemoryTypes, GardenerEnabled: body.GardenerEnabled,
+		SortOrder: body.SortOrder, IsPublic: body.IsPublic, IsArchived: body.IsArchived,
 	})
 	if err != nil {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
@@ -265,7 +267,8 @@ func (a *BillingAdmin) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 	if err := a.svc.AdminUpdatePlan(r.Context(), id, billing.PlanUpsert{
 		Name: body.Name, Slug: body.Slug, PriceMonthlyRUB: body.PriceMonthlyRUB, PriceYearlyRUB: body.PriceYearlyRUB,
 		MaxInstances: body.MaxInstances, MonthlyTokens: body.MonthlyTokens, MaxStorageMB: body.MaxStorageMB,
-		AllowedMemoryTypes: body.AllowedMemoryTypes, SortOrder: body.SortOrder, IsPublic: body.IsPublic, IsArchived: body.IsArchived,
+		AllowedMemoryTypes: body.AllowedMemoryTypes, GardenerEnabled: body.GardenerEnabled,
+		SortOrder: body.SortOrder, IsPublic: body.IsPublic, IsArchived: body.IsArchived,
 	}); err != nil {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return

@@ -27,6 +27,7 @@ function emptyPayload(): PlanUpsertPayload {
     monthly_tokens: 100_000,
     max_storage_mb: 1024,
     allowed_memory_types: ["rag"],
+    gardener_enabled: false,
     sort_order: 0,
     is_public: true,
     is_archived: false,
@@ -43,6 +44,7 @@ function dtoToPayload(p: PlanDTO): PlanUpsertPayload {
     monthly_tokens: Number(p.monthly_tokens),
     max_storage_mb: Number(p.max_storage_mb),
     allowed_memory_types: p.allowed_memory_types?.length ? [...p.allowed_memory_types] : ["rag"],
+    gardener_enabled: !!p.gardener_enabled,
     sort_order: p.sort_order,
     is_public: p.is_public,
     is_archived: p.is_archived,
@@ -260,6 +262,9 @@ export default function SuperadminPage() {
                   <td className="px-4 py-3 text-xs text-muted">
                     {p.is_public ? <span className="mr-1 rounded bg-accent-bg px-1.5 py-0.5 text-accent">public</span> : null}
                     {p.is_archived ? <span className="rounded bg-bg2 px-1.5 py-0.5">archived</span> : null}
+                    {p.gardener_enabled ? (
+                      <span className="ml-1 rounded bg-[#eaf3de] px-1.5 py-0.5 text-[#3b6d11]">gardener</span>
+                    ) : null}
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex flex-wrap gap-1.5">
@@ -403,6 +408,18 @@ export default function SuperadminPage() {
                     className="rounded border-border2"
                   />
                   Archived
+                </label>
+                <label
+                  className="flex cursor-pointer items-center gap-2 text-xs text-muted"
+                  title="Allows Wiki Gardener Phase 0 triage and proposals for subscribers on this plan."
+                >
+                  <input
+                    type="checkbox"
+                    checked={draft.gardener_enabled}
+                    onChange={(e) => setDraft((d) => ({ ...d, gardener_enabled: e.target.checked }))}
+                    className="rounded border-border2"
+                  />
+                  Gardener
                 </label>
               </div>
               <div className="flex justify-end gap-2 pt-2">

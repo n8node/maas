@@ -183,6 +183,7 @@ export type PlanUpsertPayload = {
   monthly_tokens: number;
   max_storage_mb: number;
   allowed_memory_types: string[];
+  gardener_enabled: boolean;
   sort_order: number;
   is_public: boolean;
   is_archived: boolean;

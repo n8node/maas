@@ -425,6 +425,7 @@ type PlanUpsert struct {
 	MonthlyTokens      int64
 	MaxStorageMB       int64
 	AllowedMemoryTypes []string
+	GardenerEnabled    bool
 	SortOrder          int
 	IsPublic           bool
 	IsArchived         bool
@@ -434,10 +435,10 @@ func (s *Service) AdminCreatePlan(ctx context.Context, in PlanUpsert) (uuid.UUID
 	var id uuid.UUID
 	err := s.pool.QueryRow(ctx, `
 		INSERT INTO plans (name, slug, price_monthly_rub, price_yearly_rub, max_instances, monthly_tokens, max_storage_mb,
-			allowed_memory_types, sort_order, is_public, is_archived)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
+			allowed_memory_types, gardener_enabled, sort_order, is_public, is_archived)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING id`,
 		in.Name, in.Slug, in.PriceMonthlyRUB, in.PriceYearlyRUB, in.MaxInstances, in.MonthlyTokens, in.MaxStorageMB,
-		in.AllowedMemoryTypes, in.SortOrder, in.IsPublic, in.IsArchived,
+		in.AllowedMemoryTypes, in.GardenerEnabled, in.SortOrder, in.IsPublic, in.IsArchived,
 	).Scan(&id)
 	return id, err
 }
@@ -447,11 +448,11 @@ func (s *Service) AdminUpdatePlan(ctx context.Context, id uuid.UUID, in PlanUpse
 		UPDATE plans SET
 			name = $2, slug = $3, price_monthly_rub = $4, price_yearly_rub = $5,
 			max_instances = $6, monthly_tokens = $7, max_storage_mb = $8,
-			allowed_memory_types = $9, sort_order = $10, is_public = $11, is_archived = $12,
+			allowed_memory_types = $9, gardener_enabled = $10, sort_order = $11, is_public = $12, is_archived = $13,
 			updated_at = now()
 		WHERE id = $1`,
 		id, in.Name, in.Slug, in.PriceMonthlyRUB, in.PriceYearlyRUB, in.MaxInstances, in.MonthlyTokens, in.MaxStorageMB,
-		in.AllowedMemoryTypes, in.SortOrder, in.IsPublic, in.IsArchived,
+		in.AllowedMemoryTypes, in.GardenerEnabled, in.SortOrder, in.IsPublic, in.IsArchived,
 	)
 	return err
 }
