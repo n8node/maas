@@ -12,6 +12,7 @@ import {
   getWikiHealth,
   getWikiProposals,
   ingestInstance,
+  ingestInstanceFile,
   patchInstance,
   postWikiGardenerTriage,
   queryInstance,
@@ -132,6 +133,8 @@ export function WikiInstancePanels({
   const [userScopeIngest, setUserScopeIngest] = useState("");
   const [ingestBusy, setIngestBusy] = useState(false);
   const [ingestMsg, setIngestMsg] = useState<string | null>(null);
+  const [fileIngestBusy, setFileIngestBusy] = useState(false);
+  const [fileIngestMsg, setFileIngestMsg] = useState<string | null>(null);
 
   const [queryText, setQueryText] = useState("");
   const [queryUserScope, setQueryUserScope] = useState("");
@@ -220,10 +223,10 @@ export function WikiInstancePanels({
   }, [loadTabData]);
 
   useEffect(() => {
-    if (tab === "playground" && ingestMsg) {
+    if (tab === "playground" && (ingestMsg || fileIngestMsg)) {
       void loadTabData();
     }
-  }, [ingestMsg, tab, loadTabData]);
+  }, [ingestMsg, fileIngestMsg, tab, loadTabData]);
 
   async function onToggleAutoExtract() {
     if (!token) return;
@@ -271,6 +274,29 @@ export function WikiInstancePanels({
       setIngestMsg(e instanceof Error ? e.message : "Ingest failed");
     } finally {
       setIngestBusy(false);
+    }
+  }
+
+  async function onPickWikiFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || !token) return;
+    setFileIngestBusy(true);
+    setFileIngestMsg(null);
+    try {
+      const scope = userScopeIngest.trim() || undefined;
+      const r = await ingestInstanceFile(token, instanceId, file, scope);
+      const embNote = r.embedding_model ? ` · ${r.embedding_model}` : "";
+      setFileIngestMsg(
+        `Ingested ${file.name}: ${r.chunks_added} segment(s), ${formatTokens(r.tokens_consumed)} tokens${embNote}. Open the Concepts tab if new hypotheses are not visible yet.`,
+      );
+      void loadHealth();
+      void loadTabData();
+      void loadPendingProposals();
+    } catch (err) {
+      setFileIngestMsg(err instanceof Error ? err.message : "Upload failed");
+    } finally {
+      setFileIngestBusy(false);
     }
   }
 
@@ -471,7 +497,7 @@ export function WikiInstancePanels({
                 Ingest — concept extraction (SGR)
               </h2>
               <p className="mt-1 text-[12px] text-muted">
-                FTS segments; enable auto-extract in Settings for LLM routing when OpenRouter is configured.
+                Text or uploaded documents become wiki segments; with OpenRouter, auto-extract proposes concepts (toggle in Settings).
               </p>
               <form onSubmit={onIngest} className="mt-4 space-y-3">
                 <textarea
@@ -504,7 +530,7 @@ export function WikiInstancePanels({
                 </div>
                 <button
                   type="submit"
-                  disabled={ingestBusy}
+                  disabled={ingestBusy || fileIngestBusy}
                   className="w-full rounded-lg bg-ink px-4 py-2.5 text-[13px] font-medium text-bg hover:opacity-90 disabled:opacity-50"
                 >
                   {ingestBusy ? "Ingesting…" : "Ingest async"}
@@ -514,13 +540,42 @@ export function WikiInstancePanels({
                 ) : null}
               </form>
 
+              <div className="mt-4 rounded-lg border border-border2 bg-bg3 px-3 py-3">
+                <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Upload document</div>
+                <p className="mt-1 text-[11px] text-muted">
+                  .txt, .md, .html, .csv, .json, .docx — same pipeline as paste (segments + auto-extract). Legacy{" "}
+                  <span className="font-mono">.doc</span> is not supported; save as .docx or paste text.
+                </p>
+                <label className="mt-3 inline-flex cursor-pointer">
+                  <input
+                    type="file"
+                    className="sr-only"
+                    accept=".txt,.md,.markdown,.html,.htm,.csv,.json,.docx"
+                    onChange={onPickWikiFile}
+                    disabled={fileIngestBusy || ingestBusy}
+                  />
+                  <span className="rounded-lg border border-border bg-bg px-3 py-2 text-[12px] font-medium text-ink hover:bg-bg2">
+                    {fileIngestBusy ? "Uploading…" : "Choose file"}
+                  </span>
+                </label>
+                {fileIngestMsg ? (
+                  <p
+                    className={`mt-2 text-[12px] ${
+                      fileIngestMsg.includes("segment") || fileIngestMsg.includes("Ingested") ? "text-success-text" : "text-error"
+                    }`}
+                  >
+                    {fileIngestMsg}
+                  </p>
+                ) : null}
+              </div>
+
               <div className="mt-6 border-t border-border pt-4">
                 <div className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Extraction preview</div>
                 {wizardQueuedFiles.length > 0 ? (
                   <div className="mt-3 rounded-lg border border-border bg-bg2 px-3 py-2.5">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Files from create wizard</div>
                     <p className="mt-1 text-[11px] text-muted">
-                      Names are saved with the instance; upload or ingest is not automatic for wiki text pipeline yet.
+                      Names from the wizard are reminders only — use Upload document or paste text above to ingest.
                     </p>
                     <ul className="mt-2 space-y-1.5">
                       {wizardQueuedFiles.map((name) => (

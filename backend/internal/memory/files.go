@@ -32,15 +32,9 @@ type FileIngestInput struct {
 }
 
 func (s *Service) IngestFile(ctx context.Context, userID, instanceID uuid.UUID, in FileIngestInput) (*FileIngestResult, error) {
-	if s.embed == nil {
-		return nil, ErrEmbeddingsDisabled
-	}
 	inst, err := s.Get(ctx, userID, instanceID)
 	if err != nil {
 		return nil, err
-	}
-	if inst.MemoryType != "rag" {
-		return nil, fmt.Errorf("file ingest is only available for RAG instances")
 	}
 	name := filepath.Base(strings.TrimSpace(in.Filename))
 	if name == "" || name == "." {
@@ -63,92 +57,115 @@ func (s *Service) IngestFile(ctx context.Context, userID, instanceID uuid.UUID, 
 		return nil, fmt.Errorf("no extractable text from file")
 	}
 
-	chunks := splitChunks(text)
-	if len(chunks) == 0 {
-		return nil, ErrEmptyContent
-	}
-
-	var totalTok int64
-	for _, c := range chunks {
-		totalTok += estimateTokens(c)
-	}
-	_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
-
-	model := ""
-	if s.embed != nil {
-		model = s.embed.Model
-	}
-	mime := strings.TrimSpace(in.MimeType)
-	if mime == "" {
-		mime = "application/octet-stream"
-	}
-
-	tx, err := s.pool.Begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer tx.Rollback(ctx)
-
-	var srcID uuid.UUID
-	err = tx.QueryRow(ctx, `
-		INSERT INTO rag_sources (instance_id, filename, byte_size, mime_type, embedding_model, tokens_total, chunk_count)
-		VALUES ($1, $2, $3, $4, $5, 0, 0) RETURNING id`,
-		instanceID, name, len(in.Body), mime, model).Scan(&srcID)
-	if err != nil {
-		return nil, err
-	}
-
-	var inserted []uuid.UUID
-	for i := 0; i < len(chunks); i += embedBatchSize {
-		j := i + embedBatchSize
-		if j > len(chunks) {
-			j = len(chunks)
-		}
-		batch := chunks[i:j]
-		vecs, err := s.embed.Embed(ctx, batch)
+	switch inst.MemoryType {
+	case "wiki":
+		res, err := s.Ingest(ctx, userID, instanceID, IngestInput{
+			Text:        text,
+			SourceTitle: name,
+			UserScope:   in.UserScope,
+		})
 		if err != nil {
 			return nil, err
 		}
-		for k, content := range batch {
-			te := int(estimateTokens(content))
-			vecStr := vectorLiteral(vecs[k])
-			var cid uuid.UUID
-			err := tx.QueryRow(ctx, `
-				INSERT INTO rag_chunks (instance_id, user_scope, source_label, content, token_estimate, source_id, embedding)
-				VALUES ($1, $2, $3, $4, $5, $6, $7::vector) RETURNING id`,
-				instanceID, in.UserScope, name, content, te, srcID, vecStr).Scan(&cid)
+		return &FileIngestResult{
+			SourceID:       res.SourceID,
+			ChunksAdded:    res.ChunksAdded,
+			TokensConsumed: res.TokensConsumed,
+			EmbeddingModel: "",
+		}, nil
+	case "rag":
+		if s.embed == nil {
+			return nil, ErrEmbeddingsDisabled
+		}
+		chunks := splitChunks(text)
+		if len(chunks) == 0 {
+			return nil, ErrEmptyContent
+		}
+
+		var totalTok int64
+		for _, c := range chunks {
+			totalTok += estimateTokens(c)
+		}
+		_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
+
+		model := ""
+		if s.embed != nil {
+			model = s.embed.Model
+		}
+		mime := strings.TrimSpace(in.MimeType)
+		if mime == "" {
+			mime = "application/octet-stream"
+		}
+
+		tx, err := s.pool.Begin(ctx)
+		if err != nil {
+			return nil, err
+		}
+		defer tx.Rollback(ctx)
+
+		var srcID uuid.UUID
+		err = tx.QueryRow(ctx, `
+		INSERT INTO rag_sources (instance_id, filename, byte_size, mime_type, embedding_model, tokens_total, chunk_count)
+		VALUES ($1, $2, $3, $4, $5, 0, 0) RETURNING id`,
+			instanceID, name, len(in.Body), mime, model).Scan(&srcID)
+		if err != nil {
+			return nil, err
+		}
+
+		var inserted []uuid.UUID
+		for i := 0; i < len(chunks); i += embedBatchSize {
+			j := i + embedBatchSize
+			if j > len(chunks) {
+				j = len(chunks)
+			}
+			batch := chunks[i:j]
+			vecs, err := s.embed.Embed(ctx, batch)
 			if err != nil {
 				return nil, err
 			}
-			inserted = append(inserted, cid)
+			for k, content := range batch {
+				te := int(estimateTokens(content))
+				vecStr := vectorLiteral(vecs[k])
+				var cid uuid.UUID
+				err := tx.QueryRow(ctx, `
+				INSERT INTO rag_chunks (instance_id, user_scope, source_label, content, token_estimate, source_id, embedding)
+				VALUES ($1, $2, $3, $4, $5, $6, $7::vector) RETURNING id`,
+					instanceID, in.UserScope, name, content, te, srcID, vecStr).Scan(&cid)
+				if err != nil {
+					return nil, err
+				}
+				inserted = append(inserted, cid)
+			}
 		}
-	}
 
-	_, err = tx.Exec(ctx, `
+		_, err = tx.Exec(ctx, `
 		UPDATE rag_sources SET tokens_total = $2, chunk_count = $3 WHERE id = $1`,
-		srcID, totalTok, len(inserted))
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(ctx); err != nil {
-		return nil, err
-	}
-
-	if err := s.bill.ConsumeTokens(ctx, userID, totalTok); err != nil {
-		for _, cid := range inserted {
-			_, _ = s.pool.Exec(ctx, `DELETE FROM rag_chunks WHERE id = $1`, cid)
+			srcID, totalTok, len(inserted))
+		if err != nil {
+			return nil, err
 		}
-		_, _ = s.pool.Exec(ctx, `DELETE FROM rag_sources WHERE id = $1`, srcID)
-		return nil, err
-	}
 
-	return &FileIngestResult{
-		SourceID:       srcID,
-		ChunksAdded:    len(inserted),
-		TokensConsumed: totalTok,
-		EmbeddingModel: model,
-	}, nil
+		if err := tx.Commit(ctx); err != nil {
+			return nil, err
+		}
+
+		if err := s.bill.ConsumeTokens(ctx, userID, totalTok); err != nil {
+			for _, cid := range inserted {
+				_, _ = s.pool.Exec(ctx, `DELETE FROM rag_chunks WHERE id = $1`, cid)
+			}
+			_, _ = s.pool.Exec(ctx, `DELETE FROM rag_sources WHERE id = $1`, srcID)
+			return nil, err
+		}
+
+		return &FileIngestResult{
+			SourceID:       srcID,
+			ChunksAdded:    len(inserted),
+			TokensConsumed: totalTok,
+			EmbeddingModel: model,
+		}, nil
+	default:
+		return nil, fmt.Errorf("file ingest is only available for RAG and Wiki instances")
+	}
 }
 
 func (s *Service) ListSources(ctx context.Context, userID, instanceID uuid.UUID) ([]models.RAGSource, error) {

@@ -121,7 +121,7 @@ func (s *Service) ingestWiki(ctx context.Context, userID uuid.UUID, inst *models
 		}
 	}
 
-	return &IngestResult{ChunksAdded: nChunks, TokensConsumed: totalTok + extra}, nil
+	return &IngestResult{ChunksAdded: nChunks, TokensConsumed: totalTok + extra, SourceID: srcID}, nil
 }
 
 func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {

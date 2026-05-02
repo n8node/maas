@@ -30,6 +30,8 @@ func ExtractTextFromFile(filename string, data []byte) (string, error) {
 		return collapseSpace(s), nil
 	case "docx":
 		return extractDOCX(data)
+	case "doc":
+		return "", fmt.Errorf("legacy Word .doc is not supported; save as .docx or paste plain text in Playground")
 	case "pdf":
 		return "", fmt.Errorf("pdf: not supported in this build yet; export to .txt or .docx, or paste text in Playground")
 	default:
