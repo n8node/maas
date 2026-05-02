@@ -147,7 +147,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         ...base,
         concept_types: WIKI_CONCEPTS.filter((c) => conceptPick[c]),
         gardener: { enabled: gardenerEnabled, schedule: gardenerSchedule },
-        auto_extract: gardenerEnabled,
+        auto_extract: true,
       };
     }
     return {

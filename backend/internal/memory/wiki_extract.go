@@ -18,19 +18,48 @@ type extractedConceptLite struct {
 	ConceptType string `json:"concept_type"`
 }
 
+// wikiConfigAutoExtract returns whether to run LLM concept extraction after wiki text ingest.
+// Default is true when unset so concepts are created whenever OpenRouter/chat is configured.
+// Set config.auto_extract to false (or extraction.auto) to disable.
 func wikiConfigAutoExtract(cfg map[string]any) bool {
 	if cfg == nil {
-		return false
-	}
-	if v, ok := cfg["auto_extract"].(bool); ok && v {
 		return true
 	}
+	if v, ok := cfg["auto_extract"]; ok {
+		return cfgTruthyAutoExtract(v)
+	}
 	if m, ok := cfg["extraction"].(map[string]any); ok {
-		if v, ok := m["auto"].(bool); ok && v {
-			return true
+		if v, ok := m["auto"]; ok {
+			return cfgTruthyAutoExtract(v)
 		}
 	}
-	return false
+	return true
+}
+
+func cfgTruthyAutoExtract(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case float64:
+		return x != 0
+	case int:
+		return x != 0
+	case int64:
+		return x != 0
+	case string:
+		s := strings.ToLower(strings.TrimSpace(x))
+		if s == "false" || s == "0" || s == "no" || s == "off" {
+			return false
+		}
+		if s == "true" || s == "1" || s == "yes" || s == "on" {
+			return true
+		}
+		return true
+	case nil:
+		return true
+	default:
+		return true
+	}
 }
 
 func normConceptType(t string) string {

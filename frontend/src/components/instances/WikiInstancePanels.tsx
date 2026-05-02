@@ -150,7 +150,9 @@ export function WikiInstancePanels({
   const [settingsBusy, setSettingsBusy] = useState(false);
 
   const autoExtract =
-    typeof inst.config?.auto_extract === "boolean" ? (inst.config.auto_extract as boolean) : false;
+    typeof inst.config?.auto_extract === "boolean"
+      ? (inst.config.auto_extract as boolean)
+      : true;
 
   const loadHealth = useCallback(async () => {
     if (!token) return;
