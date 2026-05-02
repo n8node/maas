@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
+import { useWorkingMemoryForm, WorkingMemoryWizardStep } from "@/components/instances/WorkingMemoryWizard";
 import {
   billingMeRequest,
   createInstance,
@@ -17,10 +18,18 @@ import {
 import { getToken } from "@/lib/token";
 import clsx from "clsx";
 
-type MemoryKind = "rag" | "wiki" | "episodic";
+type MemoryKind = "rag" | "wiki" | "episodic" | "working";
 
 const STANDARD_STEP_LABELS = ["Memory type", "Configuration", "Ingest & sources", "Confirm & create"] as const;
 const EPISODIC_STEP_LABELS = ["Basics", "Decay", "Bi-temporal", "Scoping", "Review & create"] as const;
+const WORKING_STEP_LABELS = ["Basics", "TTL & expiry", "Session keys", "Self-editing", "Review & create"] as const;
+const WORKING_STEP_HINTS = [
+  "Name & use case",
+  "Key lifetime settings",
+  "Key schema & core memory",
+  "Agent core memory",
+  "Confirm and launch",
+] as const;
 const EPISODIC_STEP_HINTS = [
   "Name & description",
   "Forgetting curve settings",
@@ -58,6 +67,13 @@ const MEMORY_TYPES: Array<{
     bg: "#eaf3de",
     col: "#3b6d11",
     desc: "Chronological memory with decay",
+  },
+  {
+    id: "working",
+    name: "Working",
+    bg: "#faeeda",
+    col: "#854f0b",
+    desc: "Short-term key-value store with TTL",
   },
 ];
 
@@ -101,8 +117,31 @@ function StepDot({
   done: boolean;
   active: boolean;
   n: number;
-  variant?: "default" | "episodic";
+  variant?: "default" | "episodic" | "working";
 }) {
+  if (variant === "working") {
+    if (done) {
+      return (
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border border-[#854f0b] bg-[#854f0b] text-white">
+          <svg width="8" height="8" viewBox="0 0 8 8" fill="none" aria-hidden>
+            <polyline points=".5,4 2.5,6 7.5,1.5" stroke="white" strokeWidth="1.2" strokeLinecap="round" />
+          </svg>
+        </div>
+      );
+    }
+    if (active) {
+      return (
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-[#ba7517] bg-[#faeeda] text-[11px] font-medium text-[#854f0b]">
+          {n}
+        </div>
+      );
+    }
+    return (
+      <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-[1.5px] border-border2 bg-bg text-[11px] font-medium text-subtle">
+        {n}
+      </div>
+    );
+  }
   if (variant === "episodic") {
     if (done) {
       return (
@@ -156,7 +195,7 @@ function Toggle({
   on: boolean;
   onToggle: () => void;
   id: string;
-  accent?: "ink" | "episodic";
+  accent?: "ink" | "episodic" | "working";
 }) {
   return (
     <button
@@ -167,7 +206,13 @@ function Toggle({
       onClick={onToggle}
       className={clsx(
         "relative h-[18px] w-8 shrink-0 rounded-full transition-colors",
-        on ? (accent === "episodic" ? "bg-[#3b6d11]" : "bg-ink") : "bg-border2",
+        on
+          ? accent === "episodic"
+            ? "bg-[#3b6d11]"
+            : accent === "working"
+              ? "bg-[#854f0b]"
+              : "bg-ink"
+          : "bg-border2",
       )}
     >
       <span
@@ -194,10 +239,13 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const token = getToken() ?? "";
   const requestedType = searchParams.get("type");
   const defaultType: MemoryKind =
-    requestedType === "rag" || requestedType === "wiki" || requestedType === "episodic" ? requestedType : "wiki";
+    requestedType === "rag" || requestedType === "wiki" || requestedType === "episodic" || requestedType === "working"
+      ? requestedType
+      : "wiki";
 
   const [step, setStep] = useState(1);
   const [memoryType, setMemoryType] = useState<MemoryKind>(defaultType);
+  const workingForm = useWorkingMemoryForm();
   const [name, setName] = useState("Product Knowledge Base");
   const [episodicDescription, setEpisodicDescription] = useState(
     "Chronological memory for AI coaching sessions. Stores user conversations, mood check-ins, and progress notes per user.",
@@ -232,7 +280,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const isEpisodicWizard = memoryType === "episodic";
-  const stepLabels = isEpisodicWizard ? EPISODIC_STEP_LABELS : STANDARD_STEP_LABELS;
+  const isWorkingWizard = memoryType === "working";
+  const stepLabels = isEpisodicWizard
+    ? EPISODIC_STEP_LABELS
+    : isWorkingWizard
+      ? WORKING_STEP_LABELS
+      : STANDARD_STEP_LABELS;
   const maxStep = stepLabels.length;
   const decayRateDaily = useMemo(() => decayRate / 100, [decayRate]);
   const decayHalfLifeDays = useMemo(() => Math.round(Math.log(2) / Math.max(decayRateDaily, 0.0001)), [decayRateDaily]);
@@ -252,12 +305,11 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   useEffect(() => {
     const t = searchParams.get("type");
-    if (t === "rag" || t === "wiki" || t === "episodic") {
+    if (t === "rag" || t === "wiki" || t === "episodic" || t === "working") {
       setMemoryType(t);
       setStep(1);
-      if (t === "episodic") {
-        setName("Coach Bot History");
-      }
+      if (t === "episodic") setName("Coach Bot History");
+      if (t === "working") setName("Session Context");
     }
   }, [searchParams]);
 
@@ -268,6 +320,9 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   }, [token]);
 
   const buildConfig = useCallback(() => {
+    if (memoryType === "working") {
+      return workingForm.toConfig();
+    }
     const base = {
       ...DEFAULT_INSTANCE_MODEL_REFS,
       scoping: { user_id: userScoping, session_id: sessionScoping },
@@ -329,15 +384,16 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     retrievalThreshold,
     sessionScoping,
     userScoping,
+    workingForm.toConfig,
   ]);
 
   const configPayload = useMemo(() => {
     const c = buildConfig() as Record<string, unknown>;
-    if (!isEpisodicWizard && seedText.trim()) {
+    if (!isEpisodicWizard && !isWorkingWizard && seedText.trim()) {
       c.seed_draft_text = seedText.trim();
     }
     return c;
-  }, [buildConfig, isEpisodicWizard, seedText]);
+  }, [buildConfig, isEpisodicWizard, isWorkingWizard, seedText]);
 
   function addWizFilesFromList(fileList: FileList | File[]) {
     const list = Array.from(fileList);
@@ -351,7 +407,8 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   function canContinue(): boolean {
     if (isEpisodicWizard && step === 1) return name.trim().length > 0;
-    if (!isEpisodicWizard && step === 2) return name.trim().length > 0;
+    if (isWorkingWizard && step === 1) return name.trim().length > 0;
+    if (!isEpisodicWizard && !isWorkingWizard && step === 2) return name.trim().length > 0;
     return true;
   }
 
@@ -377,7 +434,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         config: configPayload,
       });
       const failures: string[] = [];
-      if (!isEpisodicWizard) {
+      if (!isEpisodicWizard && !isWorkingWizard) {
         const st = seedText.trim();
         if (st) {
           try {
@@ -427,12 +484,22 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         : "—";
 
   const headerTitle = (
-    <span className="flex items-center gap-1.5 text-[12px] font-normal text-muted">
+    <span className="flex flex-wrap items-center gap-1.5 text-[12px] font-normal text-muted">
       <Link href="/instances" className="hover:text-ink">
         Instances
       </Link>
       <span className="text-border2">›</span>
-      <span className="font-medium text-ink">New instance</span>
+      {isEpisodicWizard || isWorkingWizard ? (
+        <>
+          <span>New instance</span>
+          <span className="text-border2">›</span>
+          <span className="font-medium text-ink">
+            {isWorkingWizard ? "Working memory" : "Episodic memory"}
+          </span>
+        </>
+      ) : (
+        <span className="font-medium text-ink">New instance</span>
+      )}
     </span>
   );
 
@@ -442,9 +509,21 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
       onLogout={onLogout}
       title={headerTitle}
       headerRight={
-        <Link href="/instances" className="text-[12px] font-medium text-accent hover:underline">
-          ← Back to list
-        </Link>
+        isEpisodicWizard || isWorkingWizard ? (
+          <button
+            type="button"
+            className="text-[12px] font-medium text-muted hover:text-ink"
+            onClick={() => {
+              if (window.confirm("Discard this draft and return to the instance list?")) router.push("/instances");
+            }}
+          >
+            ✕ Discard
+          </button>
+        ) : (
+          <Link href="/instances" className="text-[12px] font-medium text-accent hover:underline">
+            ← Back to list
+          </Link>
+        )
       }
     >
       <div className="flex min-h-0 flex-1">
@@ -452,7 +531,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         <aside
           className={clsx(
             "shrink-0 border-r border-border bg-bg px-4 py-6",
-            isEpisodicWizard ? "w-[220px]" : "w-[200px]",
+            isEpisodicWizard || isWorkingWizard ? "w-[220px]" : "w-[200px]",
           )}
         >
           <div className="mb-4 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle">Setup steps</div>
@@ -462,7 +541,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               const done = step > n;
               const active = step === n;
               const isLast = i === stepLabels.length - 1;
-              const dotVariant = isEpisodicWizard ? "episodic" : "default";
+              const dotVariant = isEpisodicWizard ? "episodic" : isWorkingWizard ? "working" : "default";
               return (
                 <li key={label} className={clsx("relative flex gap-2.5", !isLast ? "pb-6" : "")}>
                   {!isLast ? (
@@ -486,6 +565,11 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                         {EPISODIC_STEP_HINTS[i]}
                       </span>
                     ) : null}
+                    {isWorkingWizard && WORKING_STEP_HINTS[i] ? (
+                      <span className="mt-0.5 max-w-[148px] text-[10px] leading-snug text-subtle">
+                        {WORKING_STEP_HINTS[i]}
+                      </span>
+                    ) : null}
                   </span>
                 </li>
               );
@@ -495,7 +579,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
         <div className="flex min-w-0 flex-1 flex-col">
           <div className="flex-1 overflow-y-auto px-7 py-7">
-            {!isEpisodicWizard && step === 1 ? (
+            {!isEpisodicWizard && !isWorkingWizard && step === 1 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Choose memory type</h1>
                 <p className="mt-1 text-[13px] text-muted">Select the type of memory that fits your use case.</p>
@@ -510,7 +594,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                         disabled={!allowed}
                         title={!allowed ? "Not included in your current plan" : undefined}
                         onClick={() => {
-                          if (allowed) setMemoryType(t.id);
+                          if (!allowed) return;
+                          setMemoryType(t.id);
+                          setStep(1);
+                          if (t.id === "working") setName("Session Context");
+                          else if (t.id === "episodic") setName("Coach Bot History");
+                          else setName("Product Knowledge Base");
                         }}
                         className={clsx(
                           "relative rounded-[12px] border bg-bg p-3.5 text-left transition-colors",
@@ -544,6 +633,17 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     );
                   })}
                 </div>
+              </>
+            ) : null}
+
+            {isWorkingWizard ? (
+              <>
+                <WorkingMemoryWizardStep step={step} form={workingForm} name={name} setName={setName} />
+                {err ? (
+                  <div className="mt-4 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-xs text-error">
+                    {err}
+                  </div>
+                ) : null}
               </>
             ) : null}
 
@@ -1215,7 +1315,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               </>
             ) : null}
 
-            {!isEpisodicWizard && step === 2 ? (
+            {!isEpisodicWizard && !isWorkingWizard && step === 2 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Configure {typeMeta.name} memory</h1>
                 <p className="mt-1 text-[13px] text-muted">Customize the instance settings. You can change these later.</p>
@@ -1382,7 +1482,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               </>
             ) : null}
 
-            {!isEpisodicWizard && step === 3 ? (
+            {!isEpisodicWizard && !isWorkingWizard && step === 3 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Ingest &amp; sources</h1>
                 <p className="mt-1 text-[13px] text-muted">
@@ -1474,7 +1574,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               </>
             ) : null}
 
-            {!isEpisodicWizard && step === 4 ? (
+            {!isEpisodicWizard && !isWorkingWizard && step === 4 ? (
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Confirm and create</h1>
                 <p className="mt-1 text-[13px] text-muted">Review your configuration before creating the instance.</p>
@@ -1549,7 +1649,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 disabled={step === 1}
                 className="rounded-lg border border-border2 bg-transparent px-4 py-2 text-[13px] text-muted hover:bg-bg2 disabled:pointer-events-none disabled:opacity-40"
               >
-                {isEpisodicWizard ? "← Back" : "Back"}
+                {isEpisodicWizard || isWorkingWizard ? "← Back" : "Back"}
               </button>
               {step < maxStep ? (
                 <button
@@ -1560,10 +1660,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     "rounded-lg px-[18px] py-2 text-[13px] font-medium hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
                     isEpisodicWizard
                       ? "bg-[#3b6d11] text-white"
-                      : "bg-ink text-bg",
+                      : isWorkingWizard
+                        ? "bg-[#854f0b] text-white"
+                        : "bg-ink text-bg",
                   )}
                 >
-                  {isEpisodicWizard ? "Continue →" : "Continue"}
+                  {isEpisodicWizard || isWorkingWizard ? "Continue →" : "Continue"}
                 </button>
               ) : (
                 <button
@@ -1574,10 +1676,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     "rounded-lg px-[18px] py-2 text-[13px] font-medium hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50",
                     isEpisodicWizard
                       ? "bg-[#3b6d11] text-white"
-                      : "bg-ink text-bg",
+                      : isWorkingWizard
+                        ? "bg-[#854f0b] text-white"
+                        : "bg-ink text-bg",
                   )}
                 >
-                  {saving ? "Creating…" : "Create instance"}
+                  {saving ? "Creating…" : isWorkingWizard ? "Create instance ✓" : "Create instance"}
                 </button>
               )}
             </div>

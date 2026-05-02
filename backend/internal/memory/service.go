@@ -179,6 +179,8 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput) 
 		allowed, err = s.planAllowsMemoryType(ctx, userID, "wiki")
 	case "episodic":
 		allowed, err = s.planAllowsMemoryType(ctx, userID, "episodic")
+	case "working":
+		allowed, err = s.planAllowsMemoryType(ctx, userID, "working")
 	default:
 		return uuid.Nil, ErrInvalidType
 	}
@@ -322,6 +324,8 @@ func (s *Service) Ingest(ctx context.Context, userID, instanceID uuid.UUID, in I
 		return s.ingestWiki(ctx, userID, inst, in)
 	case "episodic":
 		return s.ingestEpisodic(ctx, userID, instanceID, inst, in)
+	case "working":
+		return nil, fmt.Errorf("working memory: use session key API (PUT /sessions/:session_id/keys/:key), not text ingest")
 	default:
 		return nil, ErrInvalidType
 	}
@@ -418,6 +422,8 @@ func (s *Service) Query(ctx context.Context, userID, instanceID uuid.UUID, in Qu
 		return s.queryWiki(ctx, userID, instanceID, in)
 	case "episodic":
 		return s.queryEpisodic(ctx, userID, instanceID, inst, in)
+	case "working":
+		return nil, fmt.Errorf("working memory: use session key API for reads, not text query")
 	default:
 		return nil, ErrInvalidType
 	}
