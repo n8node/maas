@@ -8,6 +8,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+
+	"github.com/n8node/maas/backend/internal/models"
 )
 
 // WikiConceptInput is optional structured knowledge attached to a wiki ingest.
@@ -16,7 +18,8 @@ type WikiConceptInput struct {
 	Description string
 }
 
-func (s *Service) ingestWiki(ctx context.Context, userID, instanceID uuid.UUID, in IngestInput) (*IngestResult, error) {
+func (s *Service) ingestWiki(ctx context.Context, userID uuid.UUID, inst *models.MemoryInstance, in IngestInput) (*IngestResult, error) {
+	instanceID := inst.ID
 	text := strings.TrimSpace(in.Text)
 	if text == "" {
 		return nil, ErrEmptyContent
@@ -52,8 +55,8 @@ func (s *Service) ingestWiki(ctx context.Context, userID, instanceID uuid.UUID, 
 
 	var srcID uuid.UUID
 	err = tx.QueryRow(ctx, `
-		INSERT INTO wiki_sources (instance_id, title) VALUES ($1, $2) RETURNING id`,
-		instanceID, title).Scan(&srcID)
+		INSERT INTO wiki_sources (instance_id, title, user_scope) VALUES ($1, $2, $3) RETURNING id`,
+		instanceID, title, in.UserScope).Scan(&srcID)
 	if err != nil {
 		return nil, err
 	}
@@ -81,8 +84,8 @@ func (s *Service) ingestWiki(ctx context.Context, userID, instanceID uuid.UUID, 
 		desc := strings.TrimSpace(co.Description)
 		var cid uuid.UUID
 		err := tx.QueryRow(ctx, `
-			INSERT INTO wiki_concepts (instance_id, source_id, title, description, state, confidence)
-			VALUES ($1, $2, $3, $4, 'active', 1.0) RETURNING id`,
+			INSERT INTO wiki_concepts (instance_id, source_id, title, description, concept_type, state, confidence)
+			VALUES ($1, $2, $3, $4, 'fact', 'active', 1.0) RETURNING id`,
 			instanceID, srcID, t, desc).Scan(&cid)
 		if err != nil {
 			return nil, err
@@ -106,8 +109,19 @@ func (s *Service) ingestWiki(ctx context.Context, userID, instanceID uuid.UUID, 
 		return nil, err
 	}
 
-	_ = insertedConcept
-	return &IngestResult{ChunksAdded: nChunks, TokensConsumed: totalTok}, nil
+	_ = s.wikiLog(ctx, instanceID, "ingest", "ingest.complete", "source", &srcID, map[string]any{
+		"segments": len(insertedSeg), "manual_concepts": len(insertedConcept), "title": title,
+	}, "")
+
+	var extra int64
+	if wikiConfigAutoExtract(inst.Config) && s.chat != nil {
+		ex, err := s.runWikiExtraction(ctx, userID, inst, srcID, text)
+		if err == nil {
+			extra = ex
+		}
+	}
+
+	return &IngestResult{ChunksAdded: nChunks, TokensConsumed: totalTok + extra}, nil
 }
 
 func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {
@@ -131,6 +145,11 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 		return nil, err
 	}
 
+	var scope any
+	if in.UserScope != nil && strings.TrimSpace(*in.UserScope) != "" {
+		scope = strings.TrimSpace(*in.UserScope)
+	}
+
 	var rows pgx.Rows
 	var errQ error
 	if len(q) >= 2 {
@@ -140,17 +159,19 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 			FROM wiki_segments seg
 			INNER JOIN wiki_sources src ON src.id = seg.source_id
 			WHERE src.instance_id = $1
+			  AND ($3::text IS NULL OR src.user_scope IS NULL OR src.user_scope = $3::text)
 			  AND to_tsvector('simple', seg.content) @@ plainto_tsquery('simple', $2)
 			ORDER BY rank DESC NULLS LAST
-			LIMIT $3`, instanceID, q, topK)
+			LIMIT $4`, instanceID, q, scope, topK)
 	} else {
 		rows, errQ = s.pool.Query(ctx, `
 			SELECT seg.id::text, seg.content, 1.0::float4 AS rank
 			FROM wiki_segments seg
 			INNER JOIN wiki_sources src ON src.id = seg.source_id
 			WHERE src.instance_id = $1
+			  AND ($3::text IS NULL OR src.user_scope IS NULL OR src.user_scope = $3::text)
 			  AND seg.content ILIKE '%' || $2 || '%'
-			LIMIT $3`, instanceID, q, topK)
+			LIMIT $4`, instanceID, q, scope, topK)
 	}
 	if errQ != nil {
 		return nil, errQ
@@ -172,7 +193,7 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 	}
 	msg := "No matching wiki segments found."
 	if len(cites) > 0 {
-		msg = fmt.Sprintf("Found %d wiki segment(s). Full Concept Hypothesis pipeline (extraction, router, gardener) comes in a later milestone.", len(cites))
+		msg = fmt.Sprintf("Found %d matching segment(s) (full-text). Citations reference segment IDs; synthesis via LLM is optional for a later release.", len(cites))
 	}
 	return &QueryResult{Message: msg, Citations: cites, TokensUsed: tokCost}, rows.Err()
 }

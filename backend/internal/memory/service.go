@@ -33,6 +33,7 @@ type Service struct {
 	pool  *pgxpool.Pool
 	bill  *billing.Service
 	embed *openrouter.EmbeddingClient
+	chat  *openrouter.ChatClient
 }
 
 func NewService(pool *pgxpool.Pool, bill *billing.Service, opts ...ServiceOption) *Service {
@@ -306,7 +307,7 @@ func (s *Service) Ingest(ctx context.Context, userID, instanceID uuid.UUID, in I
 	case "rag":
 		return s.ingestRAG(ctx, userID, instanceID, in)
 	case "wiki":
-		return s.ingestWiki(ctx, userID, instanceID, in)
+		return s.ingestWiki(ctx, userID, inst, in)
 	default:
 		return nil, ErrInvalidType
 	}

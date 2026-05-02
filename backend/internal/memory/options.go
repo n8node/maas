@@ -11,3 +11,9 @@ func WithEmbedder(c *openrouter.EmbeddingClient) ServiceOption {
 		s.embed = c
 	}
 }
+
+func WithChat(c *openrouter.ChatClient) ServiceOption {
+	return func(s *Service) {
+		s.chat = c
+	}
+}

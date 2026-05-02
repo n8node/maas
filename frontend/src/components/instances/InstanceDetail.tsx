@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
 import { InstanceFilesPanel } from "@/components/instances/InstanceFilesPanel";
+import { WikiInstancePanels } from "@/components/instances/WikiInstancePanels";
 import {
   deleteInstance,
   getInstance,
@@ -139,6 +140,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
   }
 
   const isRag = inst.memory_type === "rag";
+  const isWiki = inst.memory_type === "wiki";
   const typeBadge =
     inst.memory_type === "rag" ? "RAG" : inst.memory_type === "wiki" ? "Wiki" : inst.memory_type.toUpperCase();
 
@@ -165,148 +167,142 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         </div>
       }
     >
-      <div className="border-b border-border bg-bg px-7">
-        <nav className="flex gap-1 pt-1">
-          {(
-            [
-              ["playground", "Playground"],
-              ...(isRag ? ([["files", "Files & vectors"]] as const) : []),
-            ] as const
-          ).map(([id, label]) => (
-            <button
-              key={id}
-              type="button"
-              onClick={() => setTab(id)}
-              className={clsx(
-                "-mb-px border-b-2 px-3 py-3 text-[13px] transition-colors",
-                tab === id ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      </div>
+      {isWiki ? (
+        <WikiInstancePanels instanceId={instanceId} inst={inst} onRefreshInstance={load} />
+      ) : (
+        <>
+          <div className="border-b border-border bg-bg px-7">
+            <nav className="flex gap-1 pt-1">
+              {(
+                [
+                  ["playground", "Playground"],
+                  ...(isRag ? ([["files", "Files & vectors"]] as const) : []),
+                ] as const
+              ).map(([id, label]) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => setTab(id)}
+                  className={clsx(
+                    "-mb-px border-b-2 px-3 py-3 text-[13px] transition-colors",
+                    tab === id ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink",
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </nav>
+          </div>
 
-      {isRag && tab === "files" ? (
-        <InstanceFilesPanel instanceId={instanceId} instanceName={inst.name} />
-      ) : null}
+          {isRag && tab === "files" ? (
+            <InstanceFilesPanel instanceId={instanceId} instanceName={inst.name} />
+          ) : null}
 
-      {(!isRag || tab === "playground") ? (
-      <div className="grid flex-1 gap-6 p-7 lg:grid-cols-2 lg:gap-8">
-        <section className="rounded-lg border border-border bg-bg p-5">
-          <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Ingest</h2>
-          <p className="mt-1 text-[12px] text-muted">
-            {isRag ? (
-              <>
-                Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with OpenRouter embeddings.
-              </>
-            ) : (
-              <>
-                Wiki memory: text is split into segments and indexed with full-text search. Optional title identifies the source page or note.
-              </>
-            )}
-          </p>
-          <form onSubmit={onIngest} className="mt-4 space-y-3">
-            <div>
-              <label className="text-[11px] text-subtle" htmlFor="src">
-                {isRag ? "Source label (optional)" : "Source title (optional)"}
-              </label>
-              <input
-                id="src"
-                value={sourceLabel}
-                onChange={(e) => setSourceLabel(e.target.value)}
-                className="mt-1 w-full rounded-md border border-border bg-bg3 px-3 py-2 text-[13px] outline-none ring-accent focus:border-accent focus:ring-1"
-                placeholder={isRag ? "e.g. readme.md" : "e.g. API overview"}
-              />
-            </div>
-            <div>
-              <label className="text-[11px] text-subtle" htmlFor="ing">
-                Content
-              </label>
-              <textarea
-                id="ing"
-                value={ingestText}
-                onChange={(e) => setIngestText(e.target.value)}
-                rows={10}
-                className="mt-1 w-full resize-y rounded-md border border-border bg-bg3 px-3 py-2 font-mono text-[12px] leading-relaxed outline-none ring-accent focus:border-accent focus:ring-1"
-                placeholder="Paste documents, notes, or transcripts…"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={ingestBusy}
-              className="rounded-lg bg-ink px-4 py-2 text-[12px] font-medium text-bg hover:opacity-90 disabled:opacity-50"
-            >
-              {ingestBusy ? "Ingesting…" : "Ingest"}
-            </button>
-            {ingestMsg ? (
-              <p className={`text-[12px] ${ingestMsg.startsWith("Added") ? "text-success-text" : "text-error"}`}>{ingestMsg}</p>
-            ) : null}
-          </form>
-        </section>
-
-        <section className="rounded-lg border border-border bg-bg p-5">
-          <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Query</h2>
-          <p className="mt-1 text-[12px] text-muted">
-            {isRag ? (
-              <>Uses vector similarity when file embeddings exist; otherwise full-text search. Citations only — no LLM synthesis yet.</>
-            ) : (
-              <>Full-text search over wiki segments. Citations only — no LLM synthesis yet.</>
-            )}
-          </p>
-          <form onSubmit={onQuery} className="mt-4 space-y-3">
-            <div>
-              <label className="text-[11px] text-subtle" htmlFor="q">
-                Question or keywords
-              </label>
-              <textarea
-                id="q"
-                value={queryText}
-                onChange={(e) => setQueryText(e.target.value)}
-                rows={3}
-                className="mt-1 w-full resize-y rounded-md border border-border bg-bg3 px-3 py-2 text-[13px] outline-none ring-accent focus:border-accent focus:ring-1"
-                placeholder="What should we retrieve?"
-                required
-              />
-            </div>
-            <button
-              type="submit"
-              disabled={queryBusy}
-              className="rounded-lg border border-border bg-bg px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2 disabled:opacity-50"
-            >
-              {queryBusy ? "Searching…" : "Run query"}
-            </button>
-            {queryMsg ? <p className="text-[12px] text-error">{queryMsg}</p> : null}
-            {queryBody ? (
-              <div className="space-y-3 border-t border-border pt-4">
-                <p className="text-[12px] leading-relaxed text-ink">{queryBody.message}</p>
-                <p className="text-[11px] text-subtle">Tokens used: {formatTokens(queryBody.tokens_used)}</p>
-                {queryBody.citations.length > 0 ? (
+          {!isRag || tab === "playground" ? (
+            <div className="grid flex-1 gap-6 p-7 lg:grid-cols-2 lg:gap-8">
+              <section className="rounded-lg border border-border bg-bg p-5">
+                <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Ingest</h2>
+                <p className="mt-1 text-[12px] text-muted">
+                  Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with OpenRouter embeddings.
+                </p>
+                <form onSubmit={onIngest} className="mt-4 space-y-3">
                   <div>
-                    <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-subtle">Citations</div>
-                    <ul className="space-y-2">
-                      {queryBody.citations.map((c) => (
-                        <li
-                          key={c.chunk_id}
-                          className="rounded-md border border-border2 bg-bg3 px-3 py-2 text-[11px] leading-snug text-muted"
-                        >
-                          <span className="font-mono text-[10px] text-subtle">{c.chunk_id.slice(0, 8)}…</span>
-                          <span className="mx-2 text-border">·</span>
-                          score {c.score.toFixed(3)}
-                          <p className="mt-1 text-[12px] text-ink">{c.snippet}</p>
-                        </li>
-                      ))}
-                    </ul>
+                    <label className="text-[11px] text-subtle" htmlFor="src">
+                      Source label (optional)
+                    </label>
+                    <input
+                      id="src"
+                      value={sourceLabel}
+                      onChange={(e) => setSourceLabel(e.target.value)}
+                      className="mt-1 w-full rounded-md border border-border bg-bg3 px-3 py-2 text-[13px] outline-none ring-accent focus:border-accent focus:ring-1"
+                      placeholder="e.g. readme.md"
+                    />
                   </div>
-                ) : null}
-              </div>
-            ) : null}
-          </form>
-        </section>
-      </div>
-      ) : null}
+                  <div>
+                    <label className="text-[11px] text-subtle" htmlFor="ing">
+                      Content
+                    </label>
+                    <textarea
+                      id="ing"
+                      value={ingestText}
+                      onChange={(e) => setIngestText(e.target.value)}
+                      rows={10}
+                      className="mt-1 w-full resize-y rounded-md border border-border bg-bg3 px-3 py-2 font-mono text-[12px] leading-relaxed outline-none ring-accent focus:border-accent focus:ring-1"
+                      placeholder="Paste documents, notes, or transcripts…"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={ingestBusy}
+                    className="rounded-lg bg-ink px-4 py-2 text-[12px] font-medium text-bg hover:opacity-90 disabled:opacity-50"
+                  >
+                    {ingestBusy ? "Ingesting…" : "Ingest"}
+                  </button>
+                  {ingestMsg ? (
+                    <p className={`text-[12px] ${ingestMsg.startsWith("Added") ? "text-success-text" : "text-error"}`}>{ingestMsg}</p>
+                  ) : null}
+                </form>
+              </section>
+
+              <section className="rounded-lg border border-border bg-bg p-5">
+                <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Query</h2>
+                <p className="mt-1 text-[12px] text-muted">
+                  Uses vector similarity when file embeddings exist; otherwise full-text search. Citations only — no LLM synthesis yet.
+                </p>
+                <form onSubmit={onQuery} className="mt-4 space-y-3">
+                  <div>
+                    <label className="text-[11px] text-subtle" htmlFor="q">
+                      Question or keywords
+                    </label>
+                    <textarea
+                      id="q"
+                      value={queryText}
+                      onChange={(e) => setQueryText(e.target.value)}
+                      rows={3}
+                      className="mt-1 w-full resize-y rounded-md border border-border bg-bg3 px-3 py-2 text-[13px] outline-none ring-accent focus:border-accent focus:ring-1"
+                      placeholder="What should we retrieve?"
+                      required
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    disabled={queryBusy}
+                    className="rounded-lg border border-border bg-bg px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2 disabled:opacity-50"
+                  >
+                    {queryBusy ? "Searching…" : "Run query"}
+                  </button>
+                  {queryMsg ? <p className="text-[12px] text-error">{queryMsg}</p> : null}
+                  {queryBody ? (
+                    <div className="space-y-3 border-t border-border pt-4">
+                      <p className="text-[12px] leading-relaxed text-ink">{queryBody.message}</p>
+                      <p className="text-[11px] text-subtle">Tokens used: {formatTokens(queryBody.tokens_used)}</p>
+                      {queryBody.citations.length > 0 ? (
+                        <div>
+                          <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-subtle">Citations</div>
+                          <ul className="space-y-2">
+                            {queryBody.citations.map((c) => (
+                              <li
+                                key={c.chunk_id}
+                                className="rounded-md border border-border2 bg-bg3 px-3 py-2 text-[11px] leading-snug text-muted"
+                              >
+                                <span className="font-mono text-[10px] text-subtle">{c.chunk_id.slice(0, 8)}…</span>
+                                <span className="mx-2 text-border">·</span>
+                                score {c.score.toFixed(3)}
+                                <p className="mt-1 text-[12px] text-ink">{c.snippet}</p>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </form>
+              </section>
+            </div>
+          ) : null}
+        </>
+      )}
     </InstancesShell>
   );
 }

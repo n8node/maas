@@ -52,9 +52,11 @@ func New(opts Options) http.Handler {
 	var memOpts []memory.ServiceOption
 	if strings.TrimSpace(opts.Config.OpenRouterAPIKey) != "" {
 		memOpts = append(memOpts, memory.WithEmbedder(openrouter.NewEmbeddingClient(opts.Config)))
+		memOpts = append(memOpts, memory.WithChat(openrouter.NewChatClient(opts.Config)))
 	}
 	memSvc := memory.NewService(opts.Pool, bill, memOpts...)
 	instH := handler.NewInstances(memSvc)
+	wikiH := handler.NewWiki(memSvc)
 	authDeps := appmw.AuthDeps{Cfg: opts.Config, Users: userRepo, Keys: keyRepo}
 	authRoute := appmw.Authenticate(authDeps)
 
@@ -85,6 +87,15 @@ func New(opts Options) http.Handler {
 			r.Get("/{id}/sources/{sourceId}/chunks", instH.ListSourceChunks)
 			r.Get("/{id}/sources", instH.ListSources)
 			r.Delete("/{id}/chunks/{chunkId}", instH.DeleteChunk)
+			r.Get("/{id}/wiki/health", wikiH.Health)
+			r.Get("/{id}/wiki/sources", wikiH.Sources)
+			r.Get("/{id}/wiki/concepts", wikiH.Concepts)
+			r.Patch("/{id}/wiki/concepts/{conceptId}", wikiH.PatchConcept)
+			r.Get("/{id}/wiki/action-log", wikiH.ActionLog)
+			r.Get("/{id}/wiki/gardener/proposals", wikiH.Proposals)
+			r.Post("/{id}/wiki/gardener/triage", wikiH.Triage)
+			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/approve", wikiH.ApproveProposal)
+			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/reject", wikiH.RejectProposal)
 			r.Get("/{id}", instH.Get)
 			r.Patch("/{id}", instH.Patch)
 			r.Delete("/{id}", instH.Delete)

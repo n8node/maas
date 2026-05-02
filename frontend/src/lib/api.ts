@@ -360,6 +360,188 @@ export async function queryInstance(
   return data.data;
 }
 
+export type WikiHealthDTO = {
+  coverage: number;
+  purity: number;
+  stale_ratio: number;
+  segment_count: number;
+  concept_count: number;
+  source_count: number;
+};
+
+export async function getWikiHealth(token: string, instanceId: string): Promise<WikiHealthDTO> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/health`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: WikiHealthDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load wiki health");
+  }
+  return data.data;
+}
+
+export type WikiSourceDTO = {
+  id: string;
+  title: string;
+  user_scope?: string;
+  segment_count: number;
+  created_at: string;
+};
+
+export async function getWikiSources(token: string, instanceId: string): Promise<WikiSourceDTO[]> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/sources`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { sources: WikiSourceDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not list wiki sources");
+  }
+  return data.data.sources;
+}
+
+export type WikiConceptDTO = {
+  id: string;
+  title: string;
+  description: string;
+  concept_type: string;
+  state: string;
+  confidence: number;
+  source_id?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export async function getWikiConcepts(token: string, instanceId: string, search?: string): Promise<WikiConceptDTO[]> {
+  const q = search ? `?search=${encodeURIComponent(search)}` : "";
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/concepts${q}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { concepts: WikiConceptDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not list concepts");
+  }
+  return data.data.concepts;
+}
+
+export type WikiActionLogEntryDTO = {
+  id: string;
+  actor: string;
+  action: string;
+  target_kind: string;
+  target_id?: string;
+  payload: Record<string, unknown>;
+  rationale: string;
+  created_at: string;
+};
+
+export async function getWikiActionLog(token: string, instanceId: string): Promise<WikiActionLogEntryDTO[]> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/action-log`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { entries: WikiActionLogEntryDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load action log");
+  }
+  return data.data.entries;
+}
+
+export type WikiProposalDTO = {
+  id: string;
+  proposal_type: string;
+  status: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+  resolved_at?: string;
+};
+
+export async function getWikiProposals(token: string, instanceId: string, status?: string): Promise<WikiProposalDTO[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/proposals${q}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { proposals: WikiProposalDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load proposals");
+  }
+  return data.data.proposals;
+}
+
+export async function postWikiGardenerTriage(token: string, instanceId: string): Promise<{ proposals_added: number }> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/triage`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { proposals_added: number } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Triage failed");
+  }
+  return data.data;
+}
+
+export async function approveWikiProposal(token: string, instanceId: string, proposalId: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/proposals/${encodeURIComponent(proposalId)}/approve`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Approve failed");
+  }
+}
+
+export async function rejectWikiProposal(token: string, instanceId: string, proposalId: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/proposals/${encodeURIComponent(proposalId)}/reject`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Reject failed");
+  }
+}
+
+export async function patchWikiConcept(
+  token: string,
+  instanceId: string,
+  conceptId: string,
+  body: { state?: string; description?: string },
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/concepts/${encodeURIComponent(conceptId)}`,
+    {
+      method: "PATCH",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Update failed");
+  }
+}
+
+export async function patchInstance(
+  token: string,
+  instanceId: string,
+  body: { config?: Record<string, unknown>; name?: string; status?: string },
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}`, {
+    method: "PATCH",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not update instance");
+  }
+}
+
 export type RAGSourceDTO = {
   id: string;
   instance_id: string;

@@ -26,6 +26,7 @@ type Config struct {
 	OpenRouterAPIKey          string `env:"OPENROUTER_API_KEY" envDefault:""`
 	OpenRouterBaseURL         string `env:"OPENROUTER_BASE_URL" envDefault:"https://openrouter.ai/api/v1"`
 	OpenRouterEmbeddingModel  string `env:"OPENROUTER_EMBEDDING_MODEL" envDefault:"openai/text-embedding-3-small"`
+	OpenRouterChatModel       string `env:"OPENROUTER_CHAT_MODEL" envDefault:"google/gemini-2.0-flash-001"`
 }
 
 func Load() (*Config, error) {
