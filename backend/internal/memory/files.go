@@ -35,9 +35,12 @@ func (s *Service) IngestFile(ctx context.Context, userID, instanceID uuid.UUID, 
 	if s.embed == nil {
 		return nil, ErrEmbeddingsDisabled
 	}
-	_, err := s.Get(ctx, userID, instanceID)
+	inst, err := s.Get(ctx, userID, instanceID)
 	if err != nil {
 		return nil, err
+	}
+	if inst.MemoryType != "rag" {
+		return nil, fmt.Errorf("file ingest is only available for RAG instances")
 	}
 	name := filepath.Base(strings.TrimSpace(in.Filename))
 	if name == "" || name == "." {

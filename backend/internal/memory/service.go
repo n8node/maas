@@ -94,7 +94,7 @@ func (s *Service) countActiveInstances(ctx context.Context, userID uuid.UUID) (i
 	return n, err
 }
 
-func (s *Service) planAllowsRAG(ctx context.Context, userID uuid.UUID) (bool, error) {
+func (s *Service) planAllowsMemoryType(ctx context.Context, userID uuid.UUID, want string) (bool, error) {
 	sum, err := s.bill.GetSummary(ctx, userID)
 	if err != nil {
 		return false, err
@@ -102,8 +102,9 @@ func (s *Service) planAllowsRAG(ctx context.Context, userID uuid.UUID) (bool, er
 	if sum.Plan == nil {
 		return false, fmt.Errorf("no active plan")
 	}
+	want = strings.ToLower(strings.TrimSpace(want))
 	for _, t := range sum.Plan.AllowedMemoryTypes {
-		if strings.EqualFold(strings.TrimSpace(t), "rag") {
+		if strings.EqualFold(strings.TrimSpace(t), want) {
 			return true, nil
 		}
 	}
@@ -164,14 +165,20 @@ type CreateInput struct {
 func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput) (uuid.UUID, error) {
 	_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
 	mt := strings.ToLower(strings.TrimSpace(in.MemoryType))
-	if mt != "rag" {
+	var allowed bool
+	var err error
+	switch mt {
+	case "rag":
+		allowed, err = s.planAllowsMemoryType(ctx, userID, "rag")
+	case "wiki":
+		allowed, err = s.planAllowsMemoryType(ctx, userID, "wiki")
+	default:
 		return uuid.Nil, ErrInvalidType
 	}
-	ok, err := s.planAllowsRAG(ctx, userID)
 	if err != nil {
 		return uuid.Nil, err
 	}
-	if !ok {
+	if !allowed {
 		return uuid.Nil, ErrInvalidType
 	}
 	if err := s.canCreateInstance(ctx, userID); err != nil {
@@ -280,6 +287,9 @@ type IngestInput struct {
 	Text        string
 	UserScope   *string
 	SourceLabel string
+	// Wiki: optional display title for the source (falls back to SourceLabel).
+	SourceTitle string
+	Concepts    []WikiConceptInput
 }
 
 type IngestResult struct {
@@ -288,10 +298,21 @@ type IngestResult struct {
 }
 
 func (s *Service) Ingest(ctx context.Context, userID, instanceID uuid.UUID, in IngestInput) (*IngestResult, error) {
-	_, err := s.Get(ctx, userID, instanceID)
+	inst, err := s.Get(ctx, userID, instanceID)
 	if err != nil {
 		return nil, err
 	}
+	switch inst.MemoryType {
+	case "rag":
+		return s.ingestRAG(ctx, userID, instanceID, in)
+	case "wiki":
+		return s.ingestWiki(ctx, userID, instanceID, in)
+	default:
+		return nil, ErrInvalidType
+	}
+}
+
+func (s *Service) ingestRAG(ctx context.Context, userID, instanceID uuid.UUID, in IngestInput) (*IngestResult, error) {
 	text := strings.TrimSpace(in.Text)
 	if text == "" {
 		return nil, ErrEmptyContent
@@ -359,10 +380,21 @@ type QueryInput struct {
 }
 
 func (s *Service) Query(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {
-	_, err := s.Get(ctx, userID, instanceID)
+	inst, err := s.Get(ctx, userID, instanceID)
 	if err != nil {
 		return nil, err
 	}
+	switch inst.MemoryType {
+	case "rag":
+		return s.queryRAG(ctx, userID, instanceID, in)
+	case "wiki":
+		return s.queryWiki(ctx, userID, instanceID, in)
+	default:
+		return nil, ErrInvalidType
+	}
+}
+
+func (s *Service) queryRAG(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {
 	q := strings.TrimSpace(in.Query)
 	if q == "" {
 		return nil, ErrEmptyQuery

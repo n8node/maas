@@ -183,9 +183,14 @@ func (h *Instances) Delete(w http.ResponseWriter, r *http.Request) {
 }
 
 type ingestBody struct {
-	Text        string  `json:"text"`
+	Text        string `json:"text"`
 	UserID      *string `json:"user_id"`
-	SourceLabel string  `json:"source_label"`
+	SourceLabel string `json:"source_label"`
+	SourceTitle string `json:"source_title"`
+	Concepts    []struct {
+		Title       string `json:"title"`
+		Description string `json:"description"`
+	} `json:"concepts"`
 }
 
 func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
@@ -208,8 +213,16 @@ func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "INVALID_JSON", "invalid json body")
 		return
 	}
+	concepts := make([]memory.WikiConceptInput, 0, len(body.Concepts))
+	for _, c := range body.Concepts {
+		concepts = append(concepts, memory.WikiConceptInput{Title: c.Title, Description: c.Description})
+	}
 	res, err := h.svc.Ingest(r.Context(), p.UserID, id, memory.IngestInput{
-		Text: body.Text, UserScope: body.UserID, SourceLabel: body.SourceLabel,
+		Text:        body.Text,
+		UserScope:   body.UserID,
+		SourceLabel: body.SourceLabel,
+		SourceTitle: body.SourceTitle,
+		Concepts:    concepts,
 	})
 	if errors.Is(err, billing.ErrTokensExhausted) {
 		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
@@ -220,6 +233,10 @@ func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, memory.ErrEmptyContent) {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if errors.Is(err, memory.ErrInvalidType) {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
@@ -273,6 +290,10 @@ func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if errors.Is(err, memory.ErrEmptyQuery) {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if errors.Is(err, memory.ErrInvalidType) {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}

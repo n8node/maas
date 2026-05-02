@@ -12,6 +12,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const router = useRouter();
   const token = getToken() ?? "";
   const [name, setName] = useState("");
+  const [memoryType, setMemoryType] = useState<"rag" | "wiki">("rag");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -23,7 +24,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     try {
       const id = await createInstance(token, {
         name: name.trim(),
-        memory_type: "rag",
+        memory_type: memoryType,
         config: {},
       });
       router.push(`/instances/${id}`);
@@ -54,9 +55,9 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
           <span className="text-ink">New</span>
         </nav>
 
-        <h1 className="text-xl font-medium tracking-tight text-ink">Create RAG instance</h1>
+        <h1 className="text-xl font-medium tracking-tight text-ink">Create memory instance</h1>
         <p className="mt-1 text-sm text-muted">
-          Name your instance and start ingesting text. Other memory types will appear here later.
+          Choose a memory type, name your instance, then ingest text from the playground (and files with embeddings for RAG).
         </p>
 
         <form onSubmit={onSubmit} className="mt-8 space-y-5">
@@ -78,8 +79,40 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
             />
           </div>
 
-          <div className="rounded-lg border border-border bg-bg2/40 px-4 py-3 text-[12px] text-muted">
-            <span className="font-medium text-ink">Type:</span> RAG (retrieval from stored chunks)
+          <div>
+            <span className="block text-[11px] font-medium uppercase tracking-wide text-subtle">Memory type</span>
+            <div className="mt-2 flex flex-col gap-2">
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-bg px-4 py-3 text-[13px] hover:bg-bg2">
+                <input
+                  type="radio"
+                  name="mem-type"
+                  checked={memoryType === "rag"}
+                  onChange={() => setMemoryType("rag")}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium text-ink">RAG</span>
+                  <span className="mt-0.5 block text-[12px] text-muted">
+                    Chunks + optional file uploads with embeddings; hybrid vector / full-text query.
+                  </span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-start gap-3 rounded-lg border border-border bg-bg px-4 py-3 text-[13px] hover:bg-bg2">
+                <input
+                  type="radio"
+                  name="mem-type"
+                  checked={memoryType === "wiki"}
+                  onChange={() => setMemoryType("wiki")}
+                  className="mt-0.5"
+                />
+                <span>
+                  <span className="font-medium text-ink">Wiki</span>
+                  <span className="mt-0.5 block text-[12px] text-muted">
+                    Sources and segments with full-text search (no vector uploads in this MVP).
+                  </span>
+                </span>
+              </label>
+            </div>
           </div>
 
           {err ? (

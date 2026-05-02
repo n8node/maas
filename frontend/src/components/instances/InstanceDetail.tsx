@@ -60,6 +60,10 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
     load();
   }, [load]);
 
+  useEffect(() => {
+    setTab("playground");
+  }, [instanceId]);
+
   async function onDelete() {
     if (!token || !inst) return;
     if (!window.confirm(`Delete instance “${inst.name}”? This removes all chunks.`)) return;
@@ -73,13 +77,15 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
 
   async function onIngest(e: React.FormEvent) {
     e.preventDefault();
-    if (!token) return;
+    if (!token || !inst) return;
     setIngestBusy(true);
     setIngestMsg(null);
     try {
+      const tid = sourceLabel.trim();
+      const rag = inst.memory_type === "rag";
       const r = await ingestInstance(token, instanceId, {
         text: ingestText,
-        source_label: sourceLabel.trim() || undefined,
+        ...(rag ? { source_label: tid || undefined } : { source_title: tid || undefined }),
       });
       setIngestMsg(`Added ${r.chunks_added} chunk(s), consumed ${formatTokens(r.tokens_consumed)} tokens.`);
       setIngestText("");
@@ -132,6 +138,10 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
     );
   }
 
+  const isRag = inst.memory_type === "rag";
+  const typeBadge =
+    inst.memory_type === "rag" ? "RAG" : inst.memory_type === "wiki" ? "Wiki" : inst.memory_type.toUpperCase();
+
   return (
     <InstancesShell
       user={user}
@@ -140,7 +150,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
       headerRight={
         <div className="flex items-center gap-3">
           <span className="hidden text-[12px] text-muted sm:inline">
-            {inst.memory_type.toUpperCase()} · {inst.status}
+            {typeBadge} · {inst.status}
           </span>
           <button
             type="button"
@@ -160,7 +170,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
           {(
             [
               ["playground", "Playground"],
-              ["files", "Files & vectors"],
+              ...(isRag ? ([["files", "Files & vectors"]] as const) : []),
             ] as const
           ).map(([id, label]) => (
             <button
@@ -178,28 +188,36 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         </nav>
       </div>
 
-      {tab === "files" ? (
+      {isRag && tab === "files" ? (
         <InstanceFilesPanel instanceId={instanceId} instanceName={inst.name} />
       ) : null}
 
-      {tab === "playground" ? (
+      {(!isRag || tab === "playground") ? (
       <div className="grid flex-1 gap-6 p-7 lg:grid-cols-2 lg:gap-8">
         <section className="rounded-lg border border-border bg-bg p-5">
           <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Ingest</h2>
           <p className="mt-1 text-[12px] text-muted">
-            Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with OpenRouter embeddings.
+            {isRag ? (
+              <>
+                Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with OpenRouter embeddings.
+              </>
+            ) : (
+              <>
+                Wiki memory: text is split into segments and indexed with full-text search. Optional title identifies the source page or note.
+              </>
+            )}
           </p>
           <form onSubmit={onIngest} className="mt-4 space-y-3">
             <div>
               <label className="text-[11px] text-subtle" htmlFor="src">
-                Source label (optional)
+                {isRag ? "Source label (optional)" : "Source title (optional)"}
               </label>
               <input
                 id="src"
                 value={sourceLabel}
                 onChange={(e) => setSourceLabel(e.target.value)}
                 className="mt-1 w-full rounded-md border border-border bg-bg3 px-3 py-2 text-[13px] outline-none ring-accent focus:border-accent focus:ring-1"
-                placeholder="e.g. readme.md"
+                placeholder={isRag ? "e.g. readme.md" : "e.g. API overview"}
               />
             </div>
             <div>
@@ -232,7 +250,11 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         <section className="rounded-lg border border-border bg-bg p-5">
           <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Query</h2>
           <p className="mt-1 text-[12px] text-muted">
-            Uses vector similarity when file embeddings exist; otherwise full-text search. Citations only — no LLM synthesis yet.
+            {isRag ? (
+              <>Uses vector similarity when file embeddings exist; otherwise full-text search. Citations only — no LLM synthesis yet.</>
+            ) : (
+              <>Full-text search over wiki segments. Citations only — no LLM synthesis yet.</>
+            )}
           </p>
           <form onSubmit={onQuery} className="mt-4 space-y-3">
             <div>

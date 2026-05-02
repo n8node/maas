@@ -46,6 +46,7 @@
 - Ingest / query / citations; usage logging на каждый LLM/embedding вызов.
 - Playground в dashboard.
 - **Из extensions:** async ingest по умолчанию (202 + `task_id`, `GET /tasks/...`), опционально `?sync=true`; **scoping** (`user_id` / `session_id`) на уровне данных RAG; страница задач / webhooks событий ingest (webhooks CRUD могут приехать в фазе 7 — см. ниже).
+- **Отложено (бэклог):** настройки эмбеддингов на уровне инстанса — модель OpenRouter и размерность вектора в `memory_instances.config`, миграция БД под несколько размерностей (или одна выбранная модель на инстанс) вместо глобальных env и фиксированного `vector(1536)`.
 
 ---
 

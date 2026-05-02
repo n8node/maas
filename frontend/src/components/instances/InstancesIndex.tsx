@@ -9,7 +9,9 @@ import { listInstances, type MeUser, type MemoryInstanceDTO } from "@/lib/api";
 import { getToken } from "@/lib/token";
 
 function typeLabel(t: string): string {
-  return t === "rag" ? "RAG" : t;
+  if (t === "rag") return "RAG";
+  if (t === "wiki") return "Wiki";
+  return t;
 }
 
 export function InstancesIndex({ user, onLogout }: { user: MeUser; onLogout?: () => void }) {

@@ -311,7 +311,13 @@ export type IngestResultDTO = {
 export async function ingestInstance(
   token: string,
   id: string,
-  body: { text: string; user_id?: string; source_label?: string },
+  body: {
+    text: string;
+    user_id?: string;
+    source_label?: string;
+    source_title?: string;
+    concepts?: Array<{ title: string; description: string }>;
+  },
 ): Promise<IngestResultDTO> {
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}/ingest`, {
     method: "POST",
