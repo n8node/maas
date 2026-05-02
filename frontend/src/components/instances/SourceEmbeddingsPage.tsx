@@ -74,6 +74,12 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
     return `[${head.join(", ")}, …] (${v.length} dims)`;
   }
 
+  /** Browsers may truncate very long `title` tooltips; cap for stability. */
+  function hoverTitle(text: string, max = 10000): string {
+    if (text.length <= max) return text;
+    return text.slice(0, max) + "…";
+  }
+
   const title = "Document embeddings";
   const fileLabel = source?.filename ?? "—";
 
@@ -88,7 +94,7 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
         </Link>
       }
     >
-      <div className="max-w-6xl p-7 text-[13px]">
+      <div className="w-full min-w-0 p-4 sm:p-6 lg:p-7 text-[13px]">
         <nav className="mb-5 text-[12px] text-muted">
           <Link href="/instances" className="text-accent hover:underline">
             Instances
@@ -160,30 +166,39 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
         {loading ? (
           <p className="text-sm text-muted">Loading…</p>
         ) : (
-          <div className="overflow-hidden rounded-lg border border-border bg-bg">
-            <table className="w-full text-left text-[13px]">
+          <div className="w-full min-w-0 overflow-x-auto rounded-lg border border-border bg-bg">
+            <table className="w-full min-w-0 table-auto border-collapse text-left text-[13px]">
               <thead className="border-b border-border bg-bg2/50 text-[10px] font-medium uppercase tracking-wide text-subtle">
                 <tr>
-                  <th className="w-10 px-2 py-2.5"> </th>
-                  <th className="px-3 py-2.5">№</th>
-                  <th className="min-w-[200px] px-3 py-2.5">Text</th>
-                  <th className="hidden min-w-[240px] px-3 py-2.5 md:table-cell">Vector</th>
-                  <th className="px-3 py-2.5">Date</th>
-                  <th className="px-3 py-2.5 text-right"> </th>
+                  <th className="w-8 px-1.5 py-2.5 sm:px-2"> </th>
+                  <th className="w-9 whitespace-nowrap px-2 py-2.5 sm:px-3">№</th>
+                  <th className="min-w-0 px-2 py-2.5 sm:px-3">Text</th>
+                  <th className="hidden min-w-0 px-2 py-2.5 sm:px-3 md:table-cell">Vector</th>
+                  <th className="whitespace-nowrap px-2 py-2.5 sm:px-3">Date</th>
+                  <th className="w-10 px-1.5 py-2.5 text-right sm:px-3"> </th>
                 </tr>
               </thead>
               <tbody>
                 {chunks.map((c) => (
                   <tr key={c.id} className="border-b border-border last:border-0 hover:bg-bg2/30">
-                    <td className="px-2 py-3">
+                    <td className="px-1.5 py-2.5 align-top sm:px-2 sm:py-3">
                       <span className="inline-block h-3 w-3 rounded border border-border bg-bg2" aria-hidden />
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-muted">{c.ordinal}</td>
-                    <td className="max-w-md px-3 py-3 align-top text-[12px] leading-relaxed text-ink">{c.content}</td>
-                    <td className="hidden max-w-xl px-3 py-3 align-top font-mono text-[10px] text-muted md:table-cell">
-                      {previewVec(c.embedding)}
+                    <td className="whitespace-nowrap px-2 py-2.5 align-top text-muted sm:px-3 sm:py-3">{c.ordinal}</td>
+                    <td className="min-w-0 px-2 py-2.5 align-top sm:px-3 sm:py-3">
+                      <p
+                        className="line-clamp-3 break-words text-[12px] leading-snug text-ink"
+                        title={hoverTitle(c.content)}
+                      >
+                        {c.content}
+                      </p>
                     </td>
-                    <td className="whitespace-nowrap px-3 py-3 text-[11px] text-subtle">
+                    <td className="hidden min-w-0 px-2 py-2.5 align-top font-mono text-[10px] leading-snug text-muted md:table-cell md:px-3 md:py-3">
+                      <p className="line-clamp-2 break-all" title={previewVec(c.embedding)}>
+                        {previewVec(c.embedding)}
+                      </p>
+                    </td>
+                    <td className="whitespace-nowrap px-2 py-2.5 align-top text-[11px] text-subtle sm:px-3 sm:py-3">
                       {(() => {
                         try {
                           return new Date(c.created_at).toLocaleString(undefined, {
@@ -197,7 +212,7 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
                         }
                       })()}
                     </td>
-                    <td className="px-3 py-3 text-right">
+                    <td className="px-1.5 py-2.5 text-right align-top sm:px-3 sm:py-3">
                       <button
                         type="button"
                         onClick={() => onDeleteChunk(c.id)}
