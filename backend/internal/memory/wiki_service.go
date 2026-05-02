@@ -178,6 +178,8 @@ func (s *Service) GetWikiConcept(ctx context.Context, userID, instanceID, concep
 	}
 	return &r, nil
 }
+
+type PatchWikiConceptInput struct {
 	State       *string
 	Description *string
 }
