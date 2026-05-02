@@ -22,9 +22,9 @@ type MemoryKind = "rag" | "wiki" | "episodic";
 const STANDARD_STEP_LABELS = ["Memory type", "Configuration", "Ingest & sources", "Confirm & create"] as const;
 const EPISODIC_STEP_LABELS = ["Basics", "Decay", "Bi-temporal", "Scoping", "Review & create"] as const;
 const EPISODIC_STEP_HINTS = [
-  "name & description",
-  "forgetting curve settings",
-  "time looking back",
+  "Name & description",
+  "Forgetting curve settings",
+  "Time-tracking for facts",
   "user_id & session_id",
   "Confirm and launch",
 ] as const;
@@ -1076,50 +1076,136 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
             {isEpisodicWizard && step === 5 ? (
               <>
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#3b6d11]">
+                  <svg width="12" height="12" viewBox="0 0 8 8" fill="none" aria-hidden>
+                    <polyline
+                      points="1,4 3,6 7,2"
+                      stroke="currentColor"
+                      strokeWidth="1.4"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    />
+                  </svg>
+                  Step 5 - Confirm
+                </div>
                 <h1 className="text-base font-medium tracking-tight text-ink">Review and create</h1>
-                <p className="mt-1 text-[13px] text-muted">
-                  Your Episodic instance will be ready immediately. You can change settings later.
+                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted">
+                  Your Episodic instance will be ready immediately. You can change any setting after creation.
                 </p>
 
-                <div className="mt-6 rounded-[12px] border border-border bg-bg px-4 py-3">
+                <div className="mt-7 rounded-[12px] border border-border bg-bg px-4 py-4">
+                  <div className="mb-4 flex items-start gap-3 border-b border-border pb-4">
+                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[10px] bg-[#eaf3de] text-[#3b6d11]" aria-hidden>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                        <circle cx="12" cy="12" r="9" />
+                        <path strokeLinecap="round" d="M12 7v6l4 2" />
+                      </svg>
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[15px] font-semibold tracking-tight text-ink">{name.trim() || "Untitled instance"}</div>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="rounded-md bg-[#eaf3de] px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#3b6d11]">
+                          Episodic
+                        </span>
+                        <span className="text-[12px] text-subtle">Active after creation</span>
+                      </div>
+                    </div>
+                  </div>
                   {(
                     [
-                      ["Memory type", "Episodic"],
-                      ["Name", name.trim() || "—"],
-                      ["Decay rate", `${decayRateDaily.toFixed(2)} / day · ~${decayHalfLifeDays} days half-life`],
+                      [
+                        "Embedding model",
+                        "Server default",
+                      ],
+                      ["Decay rate", `${decayRateDaily.toFixed(2)} / day — ~${decayHalfLifeDays} days half-life`],
                       ["Decay worker", decayWorkerEnabled ? decaySchedule : "Disabled"],
-                      ["Bi-temporal facts", biTemporalEnabled ? "Enabled" : "Disabled"],
-                      ["Point-in-time queries", pointInTimeEnabled ? "Enabled" : "Disabled"],
-                      ["Invalidation", EPISODIC_INVALIDATION_OPTIONS.find((x) => x.value === invalidationMode)?.label ?? "—"],
+                      [
+                        "Bi-temporal facts",
+                        !biTemporalEnabled
+                          ? "Disabled"
+                          : pointInTimeEnabled
+                            ? "Enabled - point-in-time queries"
+                            : "Enabled",
+                      ],
+                      [
+                        "Invalidation",
+                        invalidationMode === "close"
+                          ? "Close valid_until"
+                          : invalidationMode === "archive"
+                            ? "Archive the episode"
+                            : "Hard delete",
+                      ],
                       ["user_id scoping", userScoping ? "Enabled" : "Disabled"],
                       ["session_id scoping", sessionScoping ? "Enabled" : "Disabled"],
-                      ["GDPR deletion endpoint", gdprDeletionEnabled ? "Enabled" : "Disabled"],
-                      ["Retention policy", EPISODIC_RETENTION_OPTIONS.find((x) => x.value === episodicRetention)?.label ?? "—"],
-                      ["Plan", planLine],
+                      ["Cross-session endpoint", gdprDeletionEnabled ? "Enabled" : "Disabled"],
+                      [
+                        "Retention policy",
+                        EPISODIC_RETENTION_OPTIONS.find((x) => x.value === episodicRetention)?.label ?? "—",
+                      ],
                     ] as const
                   ).map(([k, v]) => (
                     <div
                       key={k}
-                      className="flex items-center justify-between border-b border-border py-1.5 text-[12px] last:border-0"
+                      className="flex items-center justify-between gap-4 border-b border-border py-2.5 text-[12px] last:border-0"
                     >
-                      <span className="text-subtle">{k}</span>
-                      <span className="max-w-[60%] text-right font-medium text-ink">{v}</span>
+                      <span className="shrink-0 text-subtle">{k}</span>
+                      <span className="max-w-[58%] text-right font-medium leading-snug text-ink">{v}</span>
                     </div>
                   ))}
                 </div>
 
-                <div className="mt-4 flex items-center justify-between rounded-lg border border-[#8ec95c] bg-[#eaf3de] px-3.5 py-3">
-                  <div>
-                    <div className="text-[12px] text-[#2d6b0f]">Cost estimate</div>
-                    <div className="text-[10px] text-[#2d6b0f]/80">
-                      Episodes are indexed for search; embeddings use the default model configured on the server.
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-sm font-medium text-[#3b6d11]">~$0.002</div>
-                    <div className="text-[10px] text-[#2d6b0f]/80">/1K episodes</div>
+                <div className="mt-5 flex flex-col gap-3 rounded-[12px] border border-[#8ec95c] bg-[#eaf3de] px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between sm:gap-6">
+                  <p className="max-w-xl text-[12px] leading-relaxed text-[#2d6b0f]">
+                    <span className="font-medium">Cost estimate:</span> ~$0.0002 per 1K episodes stored &amp; retrieved.
+                    Embedding only — no language-model extraction cost for Episodic.
+                  </p>
+                  <div className="shrink-0 text-right sm:pl-2">
+                    <div className="text-lg font-semibold text-[#3b6d11]">~$0.002</div>
+                    <div className="text-[10px] font-medium text-[#2d6b0f]/85">/ 1K episodes</div>
                   </div>
                 </div>
+
+                <section className="mt-8">
+                  <h2 className={EPISODIC_SECTION_TITLE}>What happens after creation</h2>
+                  <ul className="mt-3 space-y-3">
+                    {(
+                      [
+                        <>
+                          <strong className="font-medium text-ink">Instance is live.</strong> Your API endpoint is ready:{" "}
+                          <code className="whitespace-nowrap rounded bg-bg2 px-1 py-0.5 font-mono text-[11px] text-ink">
+                            POST /api/v1/instances/:id/ingest
+                          </code>
+                        </>,
+                        <>
+                          <strong className="font-medium text-ink">Ingest episodes</strong> with{" "}
+                          <code className="rounded bg-bg2 px-1 py-0.5 font-mono text-[11px] text-ink">user_id</code> to
+                          isolate per user. Async requests return 202 with a{" "}
+                          <code className="font-mono text-[11px] text-ink">task_id</code>.
+                        </>,
+                        <>
+                          <strong className="font-medium text-ink">Query with user_id</strong> for decay-weighted results
+                          and citations from this instance.
+                        </>,
+                        <>
+                          <strong className="font-medium text-ink">Decay worker</strong>{" "}
+                          {decayWorkerEnabled && decaySchedule !== "Manual only"
+                            ? `runs ${decaySchedule.toLowerCase()} to update episode weights.`
+                            : decayWorkerEnabled
+                              ? "runs on manual trigger only to update episode weights."
+                              : "is off; weights are updated lazily when you query."}{" "}
+                          You can also trigger runs manually from the instance.
+                        </>,
+                      ]
+                    ).map((content, i) => (
+                      <li key={i} className="flex gap-3">
+                        <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-[#3b6d11] text-[11px] font-bold text-white">
+                          {i + 1}
+                        </span>
+                        <div className="min-w-0 pt-0.5 text-[12px] leading-relaxed text-muted">{content}</div>
+                      </li>
+                    ))}
+                  </ul>
+                </section>
 
                 {err ? (
                   <div className="mt-4 rounded-lg border border-error-border bg-error-bg px-4 py-3 text-xs text-error">
@@ -1491,7 +1577,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       : "bg-ink text-bg",
                   )}
                 >
-                  {saving ? "Creating…" : isEpisodicWizard ? "Create instance →" : "Create instance"}
+                  {saving ? "Creating…" : "Create instance"}
                 </button>
               )}
             </div>
