@@ -385,16 +385,18 @@ func (s *Service) RunWikiGardenerTriage(ctx context.Context, userID, instanceID 
 	if err != nil {
 		return 0, err
 	}
+	defer rows.Close()
 	var titles []string
 	for rows.Next() {
 		var t string
 		if err := rows.Scan(&t); err != nil {
-			_ = rows.Close()
 			return 0, err
 		}
 		titles = append(titles, t)
 	}
-	_ = rows.Close()
+	if err := rows.Err(); err != nil {
+		return 0, err
+	}
 	added := 0
 	for _, t := range titles {
 		r2, err := s.pool.Query(ctx, `
@@ -408,12 +410,16 @@ func (s *Service) RunWikiGardenerTriage(ctx context.Context, userID, instanceID 
 		for r2.Next() {
 			var id uuid.UUID
 			if err := r2.Scan(&id); err != nil {
-				_ = r2.Close()
+				r2.Close()
 				return added, err
 			}
 			ids = append(ids, id)
 		}
-		_ = r2.Close()
+		if err := r2.Err(); err != nil {
+			r2.Close()
+			return added, err
+		}
+		r2.Close()
 		if len(ids) < 2 {
 			continue
 		}
