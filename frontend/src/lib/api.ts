@@ -341,6 +341,7 @@ export type QueryResultDTO = {
   message: string;
   citations: Array<{ chunk_id: string; snippet: string; score: number }>;
   tokens_used: number;
+  wiki_related_concepts?: Array<{ id: string; title: string; state: string }>;
 };
 
 export async function queryInstance(
@@ -364,10 +365,27 @@ export async function queryInstance(
   if (!d || typeof d !== "object") {
     throw new Error("Invalid query response");
   }
+  const relRaw = (d as { wiki_related_concepts?: unknown }).wiki_related_concepts;
+  let wiki_related_concepts: QueryResultDTO["wiki_related_concepts"];
+  if (Array.isArray(relRaw)) {
+    wiki_related_concepts = relRaw
+      .map((x) => {
+        if (!x || typeof x !== "object") return null;
+        const o = x as Record<string, unknown>;
+        const id = typeof o.id === "string" ? o.id : "";
+        const title = typeof o.title === "string" ? o.title : "";
+        const state = typeof o.state === "string" ? o.state : "";
+        if (!id) return null;
+        return { id, title, state };
+      })
+      .filter((x): x is NonNullable<typeof x> => x != null);
+    if (wiki_related_concepts.length === 0) wiki_related_concepts = undefined;
+  }
   return {
     message: typeof d.message === "string" ? d.message : "",
     citations: Array.isArray(d.citations) ? d.citations : [],
     tokens_used: typeof d.tokens_used === "number" && !Number.isNaN(d.tokens_used) ? d.tokens_used : 0,
+    wiki_related_concepts,
   };
 }
 
@@ -535,6 +553,33 @@ export async function rejectWikiProposal(token: string, instanceId: string, prop
     const data = (await parseJson(res)) as Partial<ApiErrBody>;
     throw new Error(data.error?.message ?? "Reject failed");
   }
+}
+
+export async function dismissWikiProposal(token: string, instanceId: string, proposalId: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/proposals/${encodeURIComponent(proposalId)}/dismiss`,
+    { method: "POST", headers: { Authorization: `Bearer ${token}` } },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Dismiss failed");
+  }
+}
+
+export async function getWikiConcept(token: string, instanceId: string, conceptId: string): Promise<WikiConceptDTO> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/concepts/${encodeURIComponent(conceptId)}`,
+    { headers: { Authorization: `Bearer ${token}` } },
+  );
+  const data = (await parseJson(res)) as { data?: { concept?: WikiConceptDTO } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load concept");
+  }
+  const c = data.data?.concept;
+  if (!c || typeof c !== "object") {
+    throw new Error("Invalid concept response");
+  }
+  return c;
 }
 
 export async function patchWikiConcept(

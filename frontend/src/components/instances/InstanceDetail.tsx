@@ -107,7 +107,12 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
     setQueryBody(null);
     try {
       const r = await queryInstance(token, instanceId, { query: queryText, top_k: 5 });
-      setQueryBody({ message: r.message, tokens_used: r.tokens_used, citations: r.citations });
+      setQueryBody({
+        message: r.message,
+        tokens_used: r.tokens_used,
+        citations: r.citations,
+        wiki_related_concepts: r.wiki_related_concepts,
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Query failed";
       setQueryMsg(msg);

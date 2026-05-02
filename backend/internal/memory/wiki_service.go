@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -265,10 +266,10 @@ func (s *Service) WikiHealth(ctx context.Context, userID, instanceID uuid.UUID) 
 	}
 
 	var dupGroups int
-	_ = s.pool.QueryRow(ctx, `
+	_ = s.pool.QueryRow(ctx, fmt.Sprintf(`
 		SELECT COUNT(*) FROM (
-		  SELECT lower(trim(title)) t FROM wiki_concepts WHERE instance_id = $1 GROUP BY lower(trim(title)) HAVING COUNT(*) > 1
-		) x`, instanceID).Scan(&dupGroups)
+		  SELECT %s t FROM wiki_concepts WHERE instance_id = $1 GROUP BY 1 HAVING COUNT(*) > 1
+		) x`, wikiTitleNormSQLCol), instanceID).Scan(&dupGroups)
 
 	purity := 1.0
 	if concN > 0 {

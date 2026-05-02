@@ -303,11 +303,15 @@ func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
+	data := map[string]any{
 		"message":     res.Message,
 		"citations":   res.Citations,
 		"tokens_used": res.TokensUsed,
-	}})
+	}
+	if len(res.WikiRelatedConcepts) > 0 {
+		data["wiki_related_concepts"] = res.WikiRelatedConcepts
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
 func (h *Instances) IngestFile(w http.ResponseWriter, r *http.Request) {

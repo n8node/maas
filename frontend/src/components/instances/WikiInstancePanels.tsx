@@ -18,6 +18,7 @@ import {
   postWikiGardenerTriage,
   queryInstance,
   rejectWikiProposal,
+  dismissWikiProposal,
   type MemoryInstanceDTO,
   type QueryResultDTO,
   type WikiActionLogEntryDTO,
@@ -159,6 +160,7 @@ export function WikiInstancePanels({
   const [previewConcepts, setPreviewConcepts] = useState<WikiConceptDTO[]>([]);
   const [actions, setActions] = useState<WikiActionLogEntryDTO[]>([]);
   const [proposals, setProposals] = useState<WikiProposalDTO[]>([]);
+  const [proposalListFilter, setProposalListFilter] = useState<"pending" | "all">("pending");
   const [repairConcepts, setRepairConcepts] = useState<WikiConceptDTO[]>([]);
   const [triageBusy, setTriageBusy] = useState(false);
   const [triageNotice, setTriageNotice] = useState<string | null>(null);
@@ -215,13 +217,14 @@ export function WikiInstancePanels({
       } else if (tab === "actionlog") {
         setActions(await getWikiActionLog(token, instanceId));
       } else if (tab === "gardener") {
+        const st = proposalListFilter === "all" ? "all" : "pending";
         const [p, rc] = await Promise.all([
-          getWikiProposals(token, instanceId, "pending"),
+          getWikiProposals(token, instanceId, st),
           getWikiRepairConcepts(token, instanceId),
         ]);
         setProposals(p);
         setRepairConcepts(rc);
-        setPendingProposalCount(p.length);
+        void loadPendingProposals();
       } else if (tab === "playground") {
         const list = await getWikiConcepts(token, instanceId);
         setPreviewConcepts(list.slice(0, 8));
@@ -229,7 +232,7 @@ export function WikiInstancePanels({
     } catch {
       /* ignore */
     }
-  }, [token, instanceId, tab, conceptSearch]);
+  }, [token, instanceId, tab, conceptSearch, proposalListFilter, loadPendingProposals]);
 
   useEffect(() => {
     if (tab !== "gardener") {
@@ -349,7 +352,12 @@ export function WikiInstancePanels({
         top_k: topK,
         user_id: queryUserScope.trim() || undefined,
       });
-      setQueryBody({ message: r.message, tokens_used: r.tokens_used, citations: r.citations });
+      setQueryBody({
+        message: r.message,
+        tokens_used: r.tokens_used,
+        citations: r.citations,
+        wiki_related_concepts: r.wiki_related_concepts,
+      });
     } catch (e) {
       setQueryMsg(e instanceof Error ? e.message : "Query failed");
     } finally {
@@ -364,13 +372,12 @@ export function WikiInstancePanels({
     try {
       const result = await postWikiGardenerTriage(token, instanceId);
       const [p, rc] = await Promise.all([
-        getWikiProposals(token, instanceId, "pending"),
+        getWikiProposals(token, instanceId, proposalListFilter === "all" ? "all" : "pending"),
         getWikiRepairConcepts(token, instanceId),
       ]);
       setProposals(p);
       setRepairConcepts(rc);
-      setPendingProposalCount(p.length);
-      void loadHealth();
+      void loadPendingProposals();
       setActions(await getWikiActionLog(token, instanceId));
 
       const parts = [
@@ -767,6 +774,31 @@ export function WikiInstancePanels({
                         </ul>
                       </div>
                     ) : null}
+                    {queryBody.wiki_related_concepts && queryBody.wiki_related_concepts.length > 0 ? (
+                      <div>
+                        <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-subtle">
+                          Related concepts
+                        </div>
+                        <ul className="flex flex-wrap gap-2">
+                          {queryBody.wiki_related_concepts.map((rc) => (
+                            <li
+                              key={rc.id}
+                              className="rounded-md border border-border bg-bg2 px-2.5 py-1.5 text-[11px]"
+                            >
+                              <span className="font-medium text-ink">{rc.title || rc.id.slice(0, 8)}</span>
+                              <span
+                                className={clsx(
+                                  "ml-1.5 inline-block rounded px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                                  stateBadgeClass(rc.state ?? ""),
+                                )}
+                              >
+                                {rc.state ?? "—"}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ) : null}
                   </div>
                 ) : null}
               </form>
@@ -1054,6 +1086,20 @@ export function WikiInstancePanels({
               <p className="mb-6 text-[12px] text-muted">No concepts flagged for repair (stale / disputed / weak).</p>
             )}
 
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
+              <label className="flex items-center gap-2 text-[12px] text-muted">
+                <span>Proposals</span>
+                <select
+                  value={proposalListFilter}
+                  onChange={(e) => setProposalListFilter(e.target.value === "all" ? "all" : "pending")}
+                  className="rounded-md border border-border bg-bg px-2 py-1.5 text-[12px] text-ink"
+                >
+                  <option value="pending">Pending only</option>
+                  <option value="all">All statuses</option>
+                </select>
+              </label>
+            </div>
+
             <ul className="space-y-4">
               {proposals.map((p) => {
                 const tag = proposalTagStyle(p.proposal_type);
@@ -1073,24 +1119,30 @@ export function WikiInstancePanels({
                     >
                       {p.proposal_type.replace(/_/g, " ")}
                     </span>
+                    {proposalListFilter === "all" ? (
+                      <span className="ml-2 inline-block rounded border border-border bg-bg2 px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide text-muted">
+                        {p.status}
+                      </span>
+                    ) : null}
                     <h3 className="mt-2 text-[14px] font-medium text-ink">{titleText}</h3>
                     <p className="mt-1 text-[12px] text-muted">
                       {typeof pay?.reason === "string"
                         ? pay.reason
                         : "Review — approve to apply or reject to dismiss."}
                     </p>
+                    {p.status === "pending" ? (
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={async () => {
                           await approveWikiProposal(token, instanceId, p.id);
                           const [next, rc] = await Promise.all([
-                            getWikiProposals(token, instanceId, "pending"),
+                            getWikiProposals(token, instanceId, proposalListFilter === "all" ? "all" : "pending"),
                             getWikiRepairConcepts(token, instanceId),
                           ]);
                           setProposals(next);
                           setRepairConcepts(rc);
-                          setPendingProposalCount(next.length);
+                          void loadPendingProposals();
                           void loadHealth();
                         }}
                         className="rounded-lg bg-ink px-4 py-2 text-[12px] font-medium text-bg hover:opacity-90"
@@ -1101,20 +1153,45 @@ export function WikiInstancePanels({
                         type="button"
                         onClick={async () => {
                           await rejectWikiProposal(token, instanceId, p.id);
-                          const next = await getWikiProposals(token, instanceId, "pending");
+                          const next = await getWikiProposals(
+                            token,
+                            instanceId,
+                            proposalListFilter === "all" ? "all" : "pending",
+                          );
                           setProposals(next);
-                          setPendingProposalCount(next.length);
+                          void loadPendingProposals();
                         }}
                         className="rounded-lg border border-border2 bg-bg px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2"
                       >
                         Reject
                       </button>
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          await dismissWikiProposal(token, instanceId, p.id);
+                          const next = await getWikiProposals(
+                            token,
+                            instanceId,
+                            proposalListFilter === "all" ? "all" : "pending",
+                          );
+                          setProposals(next);
+                          void loadPendingProposals();
+                        }}
+                        className="rounded-lg border border-border bg-bg3 px-4 py-2 text-[12px] font-medium text-muted hover:bg-bg2 hover:text-ink"
+                      >
+                        Dismiss
+                      </button>
                     </div>
+                    ) : null}
                   </li>
                 );
               })}
             </ul>
-            {proposals.length === 0 ? <p className="text-[13px] text-muted">No pending proposals.</p> : null}
+            {proposals.length === 0 ? (
+              <p className="text-[13px] text-muted">
+                {proposalListFilter === "pending" ? "No pending proposals." : "No proposals in this list."}
+              </p>
+            ) : null}
           </div>
         ) : null}
 

@@ -118,6 +118,42 @@ func (h *Wiki) Concepts(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"concepts": list}})
 }
 
+func (h *Wiki) GetConcept(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	iid, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	cid, err := uuid.Parse(chi.URLParam(r, "conceptId"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid concept id")
+		return
+	}
+	row, err := h.svc.GetWikiConcept(r.Context(), p.UserID, iid, cid)
+	if errors.Is(err, memory.ErrNotFound) {
+		WriteError(w, http.StatusNotFound, "NOT_FOUND", "concept not found")
+		return
+	}
+	if errors.Is(err, memory.ErrWikiOnly) {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"concept": row}})
+}
+
 func (h *Wiki) ActionLog(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
@@ -350,6 +386,42 @@ func (h *Wiki) RejectProposal(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err = h.svc.RejectWikiProposal(r.Context(), p.UserID, iid, pid)
+	if errors.Is(err, memory.ErrNotFound) {
+		WriteError(w, http.StatusNotFound, "NOT_FOUND", "proposal not found")
+		return
+	}
+	if errors.Is(err, memory.ErrWikiOnly) {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (h *Wiki) DismissProposal(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	iid, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	pid, err := uuid.Parse(chi.URLParam(r, "proposalId"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid proposal id")
+		return
+	}
+	err = h.svc.DismissWikiProposal(r.Context(), p.UserID, iid, pid)
 	if errors.Is(err, memory.ErrNotFound) {
 		WriteError(w, http.StatusNotFound, "NOT_FOUND", "proposal not found")
 		return

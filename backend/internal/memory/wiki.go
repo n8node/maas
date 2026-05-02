@@ -289,8 +289,37 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 		}
 	}
 	msg := "No matching wiki segments found."
+	var related []WikiRelatedConcept
 	if len(cites) > 0 {
 		msg = fmt.Sprintf("Found %d matching segment(s) (full-text). Citations reference segment IDs; synthesis via LLM is optional for a later release.", len(cites))
+		segUUIDs := make([]uuid.UUID, 0, len(cites))
+		for _, c := range cites {
+			id, err := uuid.Parse(strings.TrimSpace(c.ChunkID))
+			if err != nil {
+				continue
+			}
+			segUUIDs = append(segUUIDs, id)
+		}
+		if len(segUUIDs) > 0 {
+			r2, errRel := s.pool.Query(ctx, `
+				SELECT DISTINCT c.id::text, c.title, c.state
+				FROM wiki_concepts c
+				INNER JOIN wiki_segments seg ON seg.source_id = c.source_id
+				INNER JOIN wiki_sources src ON src.id = seg.source_id
+				WHERE src.instance_id = $1 AND c.instance_id = $1 AND seg.id = ANY($2::uuid[])
+				LIMIT 24`, instanceID, segUUIDs)
+			if errRel == nil {
+				defer r2.Close()
+				for r2.Next() {
+					var id, title, state string
+					if err := r2.Scan(&id, &title, &state); err != nil {
+						continue
+					}
+					related = append(related, WikiRelatedConcept{ID: id, Title: title, State: state})
+				}
+				_ = r2.Err()
+			}
+		}
 	}
-	return &QueryResult{Message: msg, Citations: cites, TokensUsed: tokCost}, rows.Err()
+	return &QueryResult{Message: msg, Citations: cites, TokensUsed: tokCost, WikiRelatedConcepts: related}, rows.Err()
 }

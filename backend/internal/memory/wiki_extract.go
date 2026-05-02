@@ -160,10 +160,11 @@ func (s *Service) wikiApplyCandidates(ctx context.Context, instanceID, sourceID 
 		desc := strings.TrimSpace(it.Description)
 		ct := normConceptType(it.ConceptType)
 		var existing uuid.UUID
-		err := s.pool.QueryRow(ctx, `
+		err := s.pool.QueryRow(ctx, fmt.Sprintf(`
 			SELECT id FROM wiki_concepts
-			WHERE instance_id = $1 AND lower(trim(title)) = lower(trim($2::text)) AND state = 'active'
+			WHERE instance_id = $1 AND %s = %s AND state = 'active'
 			LIMIT 1`,
+			wikiTitleNormSQLCol, wikiTitleNormSQLArg),
 			instanceID, title).Scan(&existing)
 		if err == nil {
 			if desc != "" {

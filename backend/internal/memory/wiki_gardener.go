@@ -52,12 +52,12 @@ func (s *Service) wikiPendingMergeForNormalizedTitle(ctx context.Context, instan
 }
 
 func (s *Service) wikiGardenerHeuristicMerge(ctx context.Context, instanceID uuid.UUID) (int, error) {
-	rows, err := s.pool.Query(ctx, `
-		SELECT lower(trim(title)) AS t
+	rows, err := s.pool.Query(ctx, fmt.Sprintf(`
+		SELECT %s AS t
 		FROM wiki_concepts
 		WHERE instance_id = $1 AND state = 'active'
-		GROUP BY lower(trim(title))
-		HAVING COUNT(*) > 1`, instanceID)
+		GROUP BY 1
+		HAVING COUNT(*) > 1`, wikiTitleNormSQLCol), instanceID)
 	if err != nil {
 		return 0, err
 	}
@@ -82,10 +82,10 @@ func (s *Service) wikiGardenerHeuristicMerge(ctx context.Context, instanceID uui
 		if dup {
 			continue
 		}
-		r2, err := s.pool.Query(ctx, `
+		r2, err := s.pool.Query(ctx, fmt.Sprintf(`
 			SELECT id FROM wiki_concepts
-			WHERE instance_id = $1 AND lower(trim(title)) = $2 AND state = 'active'
-			ORDER BY created_at ASC`, instanceID, t)
+			WHERE instance_id = $1 AND %s = $2 AND state = 'active'
+			ORDER BY created_at ASC`, wikiTitleNormSQLCol), instanceID, t)
 		if err != nil {
 			return added, err
 		}
@@ -478,6 +478,10 @@ func (s *Service) ApproveWikiProposal(ctx context.Context, userID, instanceID, p
 	}
 	var payload map[string]any
 	_ = json.Unmarshal(raw, &payload)
+	rationale := ""
+	if r, ok := payload["reason"].(string); ok {
+		rationale = strings.TrimSpace(r)
+	}
 
 	switch ptype {
 	case "merge_concepts":
@@ -593,7 +597,24 @@ func (s *Service) ApproveWikiProposal(ctx context.Context, userID, instanceID, p
 	if err != nil {
 		return err
 	}
-	return s.wikiLog(ctx, instanceID, "user", "gardener.approve", "proposal", &proposalID, map[string]any{"type": ptype}, "")
+	return s.wikiLog(ctx, instanceID, "user", "gardener.approve", "proposal", &proposalID, map[string]any{"type": ptype}, rationale)
+}
+
+// DismissWikiProposal marks a proposal as dismissed without applying it (user hides Phase 0 noise).
+func (s *Service) DismissWikiProposal(ctx context.Context, userID, instanceID, proposalID uuid.UUID) error {
+	if _, err := s.requireWikiInstance(ctx, userID, instanceID); err != nil {
+		return err
+	}
+	ct, err := s.pool.Exec(ctx, `
+		UPDATE wiki_gardener_proposals SET status = 'dismissed', resolved_at = now()
+		WHERE id = $1 AND instance_id = $2 AND status = 'pending'`, proposalID, instanceID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return s.wikiLog(ctx, instanceID, "user", "gardener.dismiss", "proposal", &proposalID, map[string]any{}, "")
 }
 
 // RejectWikiProposal marks a proposal as rejected.

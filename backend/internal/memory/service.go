@@ -375,10 +375,18 @@ type Citation struct {
 	Score   float32 `json:"score"`
 }
 
+// WikiRelatedConcept is returned for wiki queries when citations link to sources that have concepts.
+type WikiRelatedConcept struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	State string `json:"state"`
+}
+
 type QueryResult struct {
-	Message    string     `json:"message"`
-	Citations  []Citation `json:"citations"`
-	TokensUsed int64      `json:"tokens_used"`
+	Message             string               `json:"message"`
+	Citations           []Citation           `json:"citations"`
+	TokensUsed          int64                `json:"tokens_used"`
+	WikiRelatedConcepts []WikiRelatedConcept `json:"wiki_related_concepts,omitempty"`
 }
 
 type QueryInput struct {
