@@ -429,6 +429,42 @@ func (h *Instances) ListSources(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"sources": out}})
 }
 
+func (h *Instances) DeleteSource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodDelete {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	iid, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	sid, err := uuid.Parse(chi.URLParam(r, "sourceId"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source id")
+		return
+	}
+	err = h.svc.DeleteSource(r.Context(), p.UserID, iid, sid)
+	if errors.Is(err, memory.ErrNotFound) {
+		WriteError(w, http.StatusNotFound, "NOT_FOUND", "source not found")
+		return
+	}
+	if errors.Is(err, memory.ErrInvalidType) {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func ragSourceToJSON(s models.RAGSource) map[string]any {
 	return map[string]any{
 		"id":               s.ID.String(),

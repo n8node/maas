@@ -74,7 +74,8 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
     return `[${head.join(", ")}, …] (${v.length} dims)`;
   }
 
-  const title = source?.filename ?? "Embeddings";
+  const title = "Document embeddings";
+  const fileLabel = source?.filename ?? "—";
 
   return (
     <InstancesShell
@@ -97,13 +98,17 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
             Detail
           </Link>
           <span className="mx-2 text-border">/</span>
-          <span className="text-ink">Embeddings</span>
+          <span className="text-ink">Document embeddings</span>
         </nav>
 
         {source ? (
+          <p className="mb-1 text-[15px] font-medium text-ink">{fileLabel}</p>
+        ) : !loading ? (
+          <p className="mb-1 text-[13px] text-muted">Source not found or was deleted.</p>
+        ) : null}
+        {source ? (
           <p className="mb-6 text-[12px] text-muted">
-            {source.filename} — {source.chunk_count} chunk(s) · {formatTokens(source.tokens_total)} tokens ·{" "}
-            {source.embedding_model || "—"}
+            {source.chunk_count} chunk(s) · {formatTokens(source.tokens_total)} tokens · {source.embedding_model || "—"}
           </p>
         ) : null}
 
@@ -162,7 +167,7 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
                   <th className="w-10 px-2 py-2.5"> </th>
                   <th className="px-3 py-2.5">№</th>
                   <th className="min-w-[200px] px-3 py-2.5">Text</th>
-                  <th className="hidden min-w-[240px] px-3 py-2.5 xl:table-cell">Vector</th>
+                  <th className="hidden min-w-[240px] px-3 py-2.5 md:table-cell">Vector</th>
                   <th className="px-3 py-2.5">Date</th>
                   <th className="px-3 py-2.5 text-right"> </th>
                 </tr>
@@ -175,13 +180,13 @@ export function SourceEmbeddingsPage({ user, onLogout, instanceId, sourceId }: P
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-muted">{c.ordinal}</td>
                     <td className="max-w-md px-3 py-3 align-top text-[12px] leading-relaxed text-ink">{c.content}</td>
-                    <td className="hidden max-w-xl px-3 py-3 align-top font-mono text-[10px] text-muted xl:table-cell">
+                    <td className="hidden max-w-xl px-3 py-3 align-top font-mono text-[10px] text-muted md:table-cell">
                       {previewVec(c.embedding)}
                     </td>
                     <td className="whitespace-nowrap px-3 py-3 text-[11px] text-subtle">
                       {(() => {
                         try {
-                          return new Date(c.created_at).toLocaleString("ru-RU", {
+                          return new Date(c.created_at).toLocaleString(undefined, {
                             day: "numeric",
                             month: "short",
                             hour: "2-digit",

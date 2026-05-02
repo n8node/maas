@@ -96,6 +96,7 @@ func New(opts Options) http.Handler {
 			r.Post("/{id}/ingest-file", instH.IngestFile)
 			r.Get("/{id}/sources/{sourceId}/chunks", instH.ListSourceChunks)
 			r.Get("/{id}/sources", instH.ListSources)
+			r.Delete("/{id}/sources/{sourceId}", instH.DeleteSource)
 			r.Delete("/{id}/chunks/{chunkId}", instH.DeleteChunk)
 			r.Get("/{id}/wiki/health", wikiH.Health)
 			r.Get("/{id}/wiki/sources", wikiH.Sources)

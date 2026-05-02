@@ -6,6 +6,7 @@ import clsx from "clsx";
 
 import {
   billingMeRequest,
+  deleteRagSource,
   getRagStats,
   getRagTopics,
   ingestInstance,
@@ -108,6 +109,7 @@ export function RagInstancePanels({
 
   const [sources, setSources] = useState<RAGSourceDTO[]>([]);
   const [sourcesLoading, setSourcesLoading] = useState(true);
+  const [deletingSourceId, setDeletingSourceId] = useState<string | null>(null);
   const [topics, setTopics] = useState<RAGTopicClusterDTO[]>([]);
 
   const loadStats = useCallback(async () => {
@@ -144,6 +146,32 @@ export function RagInstancePanels({
       setSourcesLoading(false);
     }
   }, [token, instanceId]);
+
+  const onDeleteSource = useCallback(
+    async (sourceId: string, filename: string) => {
+      if (!token) return;
+      if (
+        !window.confirm(
+          `Delete "${filename}" and all its text chunks and embedding vectors? This cannot be undone.`,
+        )
+      ) {
+        return;
+      }
+      setDeletingSourceId(sourceId);
+      setFileMsg(null);
+      try {
+        await deleteRagSource(token, instanceId, sourceId);
+        await loadDocuments();
+        void loadStats();
+        void loadTopics();
+      } catch (e) {
+        setFileMsg(e instanceof Error ? e.message : "Delete failed");
+      } finally {
+        setDeletingSourceId(null);
+      }
+    },
+    [token, instanceId, loadDocuments, loadStats, loadTopics],
+  );
 
   const loadTopics = useCallback(async () => {
     if (!token) return;
@@ -601,7 +629,7 @@ export function RagInstancePanels({
               </div>
             ) : (
               <div className="overflow-x-auto rounded-[12px] border border-border bg-bg">
-                <table className="w-full min-w-[560px] text-left text-[13px]">
+                <table className="w-full min-w-[720px] text-left text-[13px]">
                   <thead className="border-b border-border bg-bg2 text-[10px] font-medium uppercase tracking-wide text-subtle">
                     <tr>
                       <th className="px-4 py-2.5">Name</th>
@@ -609,6 +637,7 @@ export function RagInstancePanels({
                       <th className="px-4 py-2.5">Chunks</th>
                       <th className="px-4 py-2.5">Status</th>
                       <th className="px-4 py-2.5">Indexed</th>
+                      <th className="px-4 py-2.5 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -626,6 +655,24 @@ export function RagInstancePanels({
                         </td>
                         <td className="px-4 py-3 text-[12px] text-subtle">
                           {formatRelativeTime(s.created_at)}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <div className="flex flex-wrap items-center justify-end gap-2">
+                            <Link
+                              href={`/instances/${instanceId}/files/${s.id}`}
+                              className="rounded-md border border-border2 bg-bg px-2.5 py-1 text-[11px] font-medium text-ink hover:bg-bg2"
+                            >
+                              Vectors
+                            </Link>
+                            <button
+                              type="button"
+                              disabled={deletingSourceId === s.id}
+                              onClick={() => void onDeleteSource(s.id, s.filename)}
+                              className="rounded-md border border-[#f09595] bg-[#fcebeb] px-2.5 py-1 text-[11px] font-medium text-[#a32d2d] hover:opacity-90 disabled:opacity-50"
+                            >
+                              {deletingSourceId === s.id ? "…" : "Delete"}
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}

@@ -693,6 +693,20 @@ export async function listSources(token: string, instanceId: string): Promise<RA
   return data.data.sources;
 }
 
+export async function deleteRagSource(token: string, instanceId: string, sourceId: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(sourceId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not delete document");
+  }
+}
+
 export type FileIngestResultDTO = {
   source_id: string;
   chunks_added: number;

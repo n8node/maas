@@ -198,6 +198,29 @@ func (s *Service) ListSources(ctx context.Context, userID, instanceID uuid.UUID)
 	return out, rows.Err()
 }
 
+// DeleteSource removes a file-backed RAG source and all its chunks (including embedding vectors) via ON DELETE CASCADE.
+func (s *Service) DeleteSource(ctx context.Context, userID, instanceID, sourceID uuid.UUID) error {
+	inst, err := s.Get(ctx, userID, instanceID)
+	if err != nil {
+		return err
+	}
+	if inst.MemoryType != "rag" {
+		return ErrInvalidType
+	}
+	ct, err := s.pool.Exec(ctx, `
+		DELETE FROM rag_sources s
+		USING memory_instances m
+		WHERE s.id = $1 AND s.instance_id = $2 AND m.id = s.instance_id AND m.user_id = $3`,
+		sourceID, instanceID, userID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 type ChunkRow struct {
 	ID            uuid.UUID
 	Content       string
