@@ -12,10 +12,12 @@ type Props = {
   onLogout?: () => void;
   title: React.ReactNode;
   headerRight?: React.ReactNode;
+  /** Hide the default top bar so the page can render its own header (e.g. Wiki instance). */
+  omitHeader?: boolean;
   children: React.ReactNode;
 };
 
-export function InstancesShell({ user, onLogout, title, headerRight, children }: Props) {
+export function InstancesShell({ user, onLogout, title, headerRight, omitHeader, children }: Props) {
   const token = getToken() ?? "";
   const pathname = usePathname();
   const [instanceCount, setInstanceCount] = useState(0);
@@ -45,10 +47,12 @@ export function InstancesShell({ user, onLogout, title, headerRight, children }:
         onLogout={onLogout}
       />
       <div className="flex min-h-screen flex-col">
-        <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">
-          <div className="text-[15px] font-medium text-ink">{title}</div>
-          {headerRight ? <div className="flex items-center gap-2">{headerRight}</div> : null}
-        </header>
+        {!omitHeader ? (
+          <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">
+            <div className="text-[15px] font-medium text-ink">{title}</div>
+            {headerRight ? <div className="flex items-center gap-2">{headerRight}</div> : null}
+          </header>
+        ) : null}
         <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       </div>
     </div>

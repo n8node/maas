@@ -367,6 +367,8 @@ export type WikiHealthDTO = {
   segment_count: number;
   concept_count: number;
   source_count: number;
+  stale_concept_count?: number;
+  disputed_concept_count?: number;
 };
 
 export async function getWikiHealth(token: string, instanceId: string): Promise<WikiHealthDTO> {

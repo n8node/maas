@@ -148,8 +148,10 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
     <InstancesShell
       user={user}
       onLogout={onLogout}
-      title={inst.name}
+      title={isWiki ? "" : inst.name}
+      omitHeader={isWiki}
       headerRight={
+        isWiki ? null : (
         <div className="flex items-center gap-3">
           <span className="hidden text-[12px] text-muted sm:inline">
             {typeBadge} · {inst.status}
@@ -165,10 +167,16 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
             List
           </Link>
         </div>
+        )
       }
     >
       {isWiki ? (
-        <WikiInstancePanels instanceId={instanceId} inst={inst} onRefreshInstance={load} />
+        <WikiInstancePanels
+          instanceId={instanceId}
+          inst={inst}
+          onRefreshInstance={load}
+          onDeleteInstance={onDelete}
+        />
       ) : (
         <>
           <div className="border-b border-border bg-bg px-7">

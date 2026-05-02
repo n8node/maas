@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
@@ -59,5 +60,15 @@ export default function InstancesNewPage() {
     );
   }
 
-  return <InstancesNew user={user} onLogout={logout} />;
+  return (
+    <Suspense
+      fallback={
+        <main className="flex min-h-screen items-center justify-center bg-bg3">
+          <p className="text-sm text-muted">Loading…</p>
+        </main>
+      }
+    >
+      <InstancesNew user={user} onLogout={logout} />
+    </Suspense>
+  );
 }

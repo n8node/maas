@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
@@ -42,12 +42,6 @@ const EXTRACTION_MODELS = ["Gemini 2.5 Flash", "Claude Haiku 4.5"] as const;
 const EMBEDDING_MODELS = ["text-embedding-3-large", "text-embedding-3-small"] as const;
 const WIKI_CONCEPTS = ["fact", "entity", "event", "goal", "belief", "tension", "project", "pattern"] as const;
 const GARDENER_SCHEDULES = ["Every 24 hours", "Every 12 hours", "Manual only"] as const;
-
-const SAMPLE_WIZ_FILES = [
-  { name: "product-docs.pdf", ext: "pdf" as const },
-  { name: "team-interview.mp3", ext: "mp3" as const },
-  { name: "architecture.png", ext: "png" as const },
-];
 
 function StepDot({ done, active, n }: { done: boolean; active: boolean; n: number }) {
   if (done) {
@@ -101,10 +95,13 @@ function defaultConcepts(): Record<(typeof WIKI_CONCEPTS)[number], boolean> {
 
 export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () => void }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const token = getToken() ?? "";
 
   const [step, setStep] = useState(1);
-  const [memoryType, setMemoryType] = useState<MemoryKind>("wiki");
+  const [memoryType, setMemoryType] = useState<MemoryKind>(() =>
+    searchParams.get("type") === "rag" ? "rag" : "wiki",
+  );
   const [name, setName] = useState("Product Knowledge Base");
   const [extractionModel, setExtractionModel] = useState<string>(EXTRACTION_MODELS[0]);
   const [embeddingModel, setEmbeddingModel] = useState<string>(EMBEDDING_MODELS[0]);
@@ -118,7 +115,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const [hierarchicalClustering, setHierarchicalClustering] = useState(true);
 
   const [seedText, setSeedText] = useState("");
-  const [wizFileIdx, setWizFileIdx] = useState(0);
   const [wizFiles, setWizFiles] = useState<Array<{ name: string; ext: string }>>([]);
 
   const [billing, setBilling] = useState<BillingMeData | null>(null);
@@ -126,6 +122,13 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  useEffect(() => {
+    const t = searchParams.get("type");
+    if (t === "rag" || t === "wiki") {
+      setMemoryType(t);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (!token) return;
@@ -176,12 +179,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     }
     return c;
   }, [buildConfig, seedText, wizFiles]);
-
-  function addSampleWizFile() {
-    const f = SAMPLE_WIZ_FILES[wizFileIdx % SAMPLE_WIZ_FILES.length];
-    setWizFileIdx((i) => i + 1);
-    setWizFiles((prev) => [...prev, { name: f.name, ext: f.ext }]);
-  }
 
   function addWizFilesFromList(fileList: FileList | File[]) {
     const list = Array.from(fileList);
@@ -622,13 +619,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       ))}
                     </ul>
                   ) : null}
-                  <button
-                    type="button"
-                    onClick={addSampleWizFile}
-                    className="mt-2 rounded-lg border border-border2 bg-transparent px-3 py-1.5 text-[12px] text-muted hover:bg-bg2"
-                  >
-                    + Add sample file
-                  </button>
                 </section>
 
                 <section className="mt-6">

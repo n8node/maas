@@ -218,6 +218,9 @@ type WikiHealthMetrics struct {
 	SegmentCount int   `json:"segment_count"`
 	ConceptCount int   `json:"concept_count"`
 	SourceCount  int   `json:"source_count"`
+	// Exact counts for dashboard KPI subtitles (stale · disputed).
+	StaleConceptCount    int `json:"stale_concept_count"`
+	DisputedConceptCount int `json:"disputed_concept_count"`
 }
 
 func (s *Service) WikiHealth(ctx context.Context, userID, instanceID uuid.UUID) (*WikiHealthMetrics, error) {
@@ -267,13 +270,21 @@ func (s *Service) WikiHealth(ctx context.Context, userID, instanceID uuid.UUID) 
 		staleR = float64(staleN) / float64(concN)
 	}
 
+	var staleExact, disputedExact int
+	_ = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM wiki_concepts WHERE instance_id = $1 AND state = 'stale'`, instanceID).Scan(&staleExact)
+	_ = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*) FROM wiki_concepts WHERE instance_id = $1 AND state = 'disputed'`, instanceID).Scan(&disputedExact)
+
 	return &WikiHealthMetrics{
-		Coverage:     coverage,
-		Purity:       purity,
-		StaleRatio:   staleR,
-		SegmentCount: segN,
-		ConceptCount: concN,
-		SourceCount:  srcN,
+		Coverage:             coverage,
+		Purity:               purity,
+		StaleRatio:           staleR,
+		SegmentCount:         segN,
+		ConceptCount:         concN,
+		SourceCount:          srcN,
+		StaleConceptCount:    staleExact,
+		DisputedConceptCount: disputedExact,
 	}, nil
 }
 
