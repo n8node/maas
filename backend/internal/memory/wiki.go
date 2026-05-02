@@ -198,7 +198,7 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 		return nil, errQ
 	}
 	defer rows.Close()
-	var cites []Citation
+	cites := make([]Citation, 0)
 	for rows.Next() {
 		var id, content string
 		var rank float32

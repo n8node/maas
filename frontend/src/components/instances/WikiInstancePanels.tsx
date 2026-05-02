@@ -693,9 +693,9 @@ export function WikiInstancePanels({
                       <div>
                         <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-subtle">Sources</div>
                         <ul className="space-y-2">
-                          {queryBody.citations.map((c) => (
+                          {queryBody.citations.map((c, i) => (
                             <li
-                              key={c.chunk_id}
+                              key={c.chunk_id || `citation-${i}`}
                               className="flex items-start justify-between gap-2 rounded-md border border-border2 bg-bg3 px-3 py-2 text-[11px]"
                             >
                               <div className="min-w-0">
@@ -705,10 +705,14 @@ export function WikiInstancePanels({
                                 >
                                   Wiki
                                 </span>
-                                <span className="font-mono text-[10px] text-subtle">{c.chunk_id.slice(0, 10)}…</span>
-                                <p className="mt-1 text-[12px] text-ink">{c.snippet}</p>
+                                <span className="font-mono text-[10px] text-subtle">
+                                  {(c.chunk_id ?? "").slice(0, 10)}…
+                                </span>
+                                <p className="mt-1 text-[12px] text-ink">{c.snippet ?? ""}</p>
                               </div>
-                              <span className="shrink-0 text-[11px] text-muted">{c.score.toFixed(2)}</span>
+                              <span className="shrink-0 text-[11px] text-muted">
+                                {(typeof c.score === "number" ? c.score : 0).toFixed(2)}
+                              </span>
                             </li>
                           ))}
                         </ul>

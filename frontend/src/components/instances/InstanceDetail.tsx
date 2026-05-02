@@ -289,15 +289,18 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
                         <div>
                           <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-subtle">Citations</div>
                           <ul className="space-y-2">
-                            {queryBody.citations.map((c) => (
+                            {queryBody.citations.map((c, i) => (
                               <li
-                                key={c.chunk_id}
+                                key={c.chunk_id || `citation-${i}`}
                                 className="rounded-md border border-border2 bg-bg3 px-3 py-2 text-[11px] leading-snug text-muted"
                               >
-                                <span className="font-mono text-[10px] text-subtle">{c.chunk_id.slice(0, 8)}…</span>
+                                <span className="font-mono text-[10px] text-subtle">
+                                  {(c.chunk_id ?? "").slice(0, 8)}
+                                  …
+                                </span>
                                 <span className="mx-2 text-border">·</span>
-                                score {c.score.toFixed(3)}
-                                <p className="mt-1 text-[12px] text-ink">{c.snippet}</p>
+                                score {(typeof c.score === "number" ? c.score : 0).toFixed(3)}
+                                <p className="mt-1 text-[12px] text-ink">{c.snippet ?? ""}</p>
                               </li>
                             ))}
                           </ul>

@@ -355,11 +355,19 @@ export async function queryInstance(
     },
     body: JSON.stringify(body),
   });
-  const data = (await parseJson(res)) as { data: QueryResultDTO } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data?: QueryResultDTO } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Query failed");
   }
-  return data.data;
+  const d = data.data;
+  if (!d || typeof d !== "object") {
+    throw new Error("Invalid query response");
+  }
+  return {
+    message: typeof d.message === "string" ? d.message : "",
+    citations: Array.isArray(d.citations) ? d.citations : [],
+    tokens_used: typeof d.tokens_used === "number" && !Number.isNaN(d.tokens_used) ? d.tokens_used : 0,
+  };
 }
 
 export type WikiHealthDTO = {

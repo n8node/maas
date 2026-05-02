@@ -481,7 +481,7 @@ func (s *Service) queryRAG(ctx context.Context, userID, instanceID uuid.UUID, in
 		return nil, errQ
 	}
 	defer rows.Close()
-	var cites []Citation
+	cites := make([]Citation, 0)
 	if useVec {
 		for rows.Next() {
 			var id, content string
