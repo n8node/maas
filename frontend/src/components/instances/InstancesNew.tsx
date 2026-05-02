@@ -236,12 +236,10 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const maxStep = stepLabels.length;
   const decayRateDaily = useMemo(() => decayRate / 100, [decayRate]);
   const decayHalfLifeDays = useMemo(() => Math.round(Math.log(2) / Math.max(decayRateDaily, 0.0001)), [decayRateDaily]);
-  /** 12 bars from day 0 → 90 (matches mock). */
+  /** Non-linear day samples: dense early days so the curve spans the chart (linear 0…90 collapsed decay into 1–2 bars). */
   const decayBars = useMemo(() => {
-    const n = 12;
-    const maxDay = 90;
-    return Array.from({ length: n }, (_, i) => {
-      const day = Math.round((i * maxDay) / (n - 1));
+    const days = [0, 1, 2, 3, 5, 7, 10, 14, 21, 30, 45, 60, 90];
+    return days.map((day) => {
       const weight = Math.exp(-decayRateDaily * day);
       return {
         day,
