@@ -330,9 +330,9 @@ export function WikiInstancePanels({
   ];
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col bg-bg3">
+    <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-bg3">
       {/* Memory kind pills */}
-      <div className="border-b border-border bg-bg px-7 py-3">
+      <div className="border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
         <div className="flex flex-wrap gap-2">
           {MEMORY_PILLS.map((p) => {
             const isWiki = p.id === "wiki";
@@ -376,7 +376,7 @@ export function WikiInstancePanels({
       </div>
 
       {/* Breadcrumb + actions */}
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-bg px-7 py-3">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
         <div className="flex items-center gap-2 text-[12px] text-muted">
           <Link href="/instances" className="hover:text-ink">
             Instances
@@ -410,7 +410,7 @@ export function WikiInstancePanels({
       </div>
 
       {/* KPI row */}
-      <div className="grid grid-cols-2 border-b border-border bg-bg sm:grid-cols-3 lg:grid-cols-5">
+      <div className="grid w-full min-w-0 grid-cols-2 border-b border-border bg-bg sm:grid-cols-3 lg:grid-cols-5">
         <KpiCell
           label="Concepts"
           value={health?.concept_count ?? "—"}
@@ -443,7 +443,7 @@ export function WikiInstancePanels({
         />
       </div>
 
-      <div className="relative z-20 border-b border-border bg-bg px-7">
+      <div className="relative z-20 border-b border-border bg-bg px-4 sm:px-6 lg:px-7">
         <nav className="flex flex-wrap gap-1 pt-1" aria-label="Wiki sections">
           {tabs.map(([id, label]) => (
             <button
@@ -461,10 +461,10 @@ export function WikiInstancePanels({
         </nav>
       </div>
 
-      <div className="relative z-0 flex min-h-0 flex-1 overflow-y-auto">
+      <div className="relative z-0 flex min-h-0 w-full min-w-0 flex-1 flex-col overflow-y-auto overflow-x-hidden">
         {tab === "playground" ? (
-          <div className="grid gap-6 p-7 lg:grid-cols-2 lg:gap-8">
-            <section className="rounded-[12px] border border-border bg-bg p-5">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2 lg:gap-8 lg:px-7 lg:py-7">
+            <section className="min-w-0 rounded-[12px] border border-border bg-bg p-4 sm:p-5">
               <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">
                 Ingest — concept extraction (SGR)
               </h2>
@@ -574,7 +574,7 @@ export function WikiInstancePanels({
               </div>
             </section>
 
-            <section className="rounded-[12px] border border-border bg-bg p-5">
+            <section className="min-w-0 rounded-[12px] border border-border bg-bg p-4 sm:p-5">
               <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Query with citations</h2>
               <p className="mt-1 text-[12px] text-muted">Full-text over segments; citations reference segment IDs.</p>
               <form onSubmit={onQuery} className="mt-4 space-y-3">
@@ -653,8 +653,8 @@ export function WikiInstancePanels({
         ) : null}
 
         {tab === "concepts" ? (
-          <div className="p-7">
-            <div className="mb-4 flex flex-wrap items-center gap-3">
+          <div className="w-full min-w-0 px-4 py-6 sm:px-6 lg:px-7">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
               <input
                 value={conceptSearch}
                 onChange={(e) => setConceptSearch(e.target.value)}
@@ -691,8 +691,8 @@ export function WikiInstancePanels({
                 Search
               </button>
             </div>
-            <div className="overflow-x-auto rounded-[12px] border border-border bg-bg">
-              <table className="w-full min-w-[720px] text-left text-[13px]">
+            <div className="overflow-x-auto rounded-[12px] border border-border bg-bg [-webkit-overflow-scrolling:touch]">
+              <table className="w-full min-w-[min(100%,560px)] text-left text-[13px] sm:min-w-[640px]">
                 <thead className="border-b border-border bg-bg2 text-[10px] font-medium uppercase tracking-wide text-subtle">
                   <tr>
                     <th className="px-4 py-2.5">Concept</th>
@@ -750,7 +750,8 @@ export function WikiInstancePanels({
         ) : null}
 
         {tab === "actionlog" ? (
-          <div className="rounded-[12px] border border-border bg-bg mx-7 my-7">
+          <div className="w-full min-w-0 px-4 py-6 sm:px-6 lg:px-7">
+            <div className="rounded-[12px] border border-border bg-bg">
             {actions.map((a, idx) => {
               const pl = (a.payload ?? {}) as Record<string, unknown>;
               const vis = actionVisual(a.action ?? "");
@@ -763,7 +764,7 @@ export function WikiInstancePanels({
                 <div
                   key={a.id}
                   className={clsx(
-                    "flex gap-4 px-5 py-4",
+                    "flex items-start gap-3 px-4 py-4 sm:gap-4 sm:px-5",
                     idx !== actions.length - 1 ? "border-b border-border" : "",
                   )}
                 >
@@ -792,12 +793,15 @@ export function WikiInstancePanels({
                 </div>
               );
             })}
-            {actions.length === 0 ? <p className="p-8 text-[13px] text-muted">No actions logged yet.</p> : null}
+            {actions.length === 0 ? (
+              <p className="p-6 text-[13px] text-muted sm:p-8">No actions logged yet.</p>
+            ) : null}
+            </div>
           </div>
         ) : null}
 
         {tab === "gardener" ? (
-          <div className="p-7">
+          <div className="w-full min-w-0 px-4 py-6 sm:px-6 lg:px-7">
             <div
               className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#e8c9a0] px-4 py-3"
               style={{ background: "#faeeda" }}
@@ -828,9 +832,9 @@ export function WikiInstancePanels({
                 return (
                   <li
                     key={p.id}
-                    className="relative rounded-[12px] border border-border bg-bg px-5 py-4"
+                    className="relative min-w-0 rounded-[12px] border border-border bg-bg px-4 py-4 sm:px-5"
                   >
-                    <span className="absolute right-4 top-4 text-[11px] text-subtle">Phase 0</span>
+                    <span className="absolute right-3 top-3 text-[11px] text-subtle sm:right-4 sm:top-4">Phase 0</span>
                     <span
                       className="inline-block rounded px-2 py-0.5 text-[11px] font-medium capitalize"
                       style={{ backgroundColor: tag.bg, color: tag.text }}
@@ -879,8 +883,8 @@ export function WikiInstancePanels({
         ) : null}
 
         {tab === "settings" ? (
-          <div className="grid gap-6 p-7 lg:grid-cols-2">
-            <section className="rounded-[12px] border border-border bg-bg p-5">
+          <div className="grid w-full min-w-0 grid-cols-1 gap-6 px-4 py-6 sm:px-6 lg:grid-cols-2 lg:px-7">
+            <section className="min-w-0 rounded-[12px] border border-border bg-bg p-4 sm:p-5">
               <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Basic</h2>
               <dl className="mt-4 space-y-3 text-[13px]">
                 <div className="flex justify-between gap-4 border-b border-border pb-3">
@@ -927,7 +931,7 @@ export function WikiInstancePanels({
               </p>
             </section>
 
-            <section className="rounded-[12px] border border-border bg-bg p-5">
+            <section className="min-w-0 rounded-[12px] border border-border bg-bg p-4 sm:p-5">
               <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Danger zone</h2>
               <p className="mt-2 text-[12px] text-muted">Pausing stops ingest/query. Deleting is permanent.</p>
               <div className="mt-5 flex flex-wrap gap-2">
@@ -969,7 +973,7 @@ function KpiCell({
   return (
     <div
       className={clsx(
-        "border-b border-border px-4 py-4 lg:border-b-0 lg:border-r lg:last:border-r-0",
+        "min-w-0 border-b border-border px-3 py-3 sm:px-4 sm:py-4 lg:border-b-0 lg:border-r lg:py-4 lg:last:border-r-0",
         className,
       )}
     >
