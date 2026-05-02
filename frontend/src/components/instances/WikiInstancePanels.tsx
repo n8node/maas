@@ -265,7 +265,15 @@ export function WikiInstancePanels({
         source_title: sourceTitle.trim() || undefined,
         user_id: userScopeIngest.trim() || undefined,
       });
-      setIngestMsg(`Ingested ${r.chunks_added} segment(s), ${formatTokens(r.tokens_consumed)} tokens.`);
+      setIngestMsg(
+        [
+          `Ingested ${r.chunks_added} segment(s), ${formatTokens(r.tokens_consumed)} tokens.`,
+          typeof r.wiki_concepts_added === "number" && r.wiki_concepts_added > 0
+            ? ` Added ${r.wiki_concepts_added} concept hypothesis(es).`
+            : "",
+          r.wiki_extraction_note ? ` ${r.wiki_extraction_note}` : "",
+        ].join(""),
+      );
       setIngestText("");
       void loadHealth();
       void loadTabData();
@@ -286,9 +294,13 @@ export function WikiInstancePanels({
     try {
       const scope = userScopeIngest.trim() || undefined;
       const r = await ingestInstanceFile(token, instanceId, file, scope);
-      const embNote = r.embedding_model ? ` · ${r.embedding_model}` : "";
+      const extraConcepts =
+        typeof r.wiki_concepts_added === "number" && r.wiki_concepts_added > 0
+          ? ` Added ${r.wiki_concepts_added} concept hypothesis(es).`
+          : "";
+      const note = r.wiki_extraction_note ? ` ${r.wiki_extraction_note}` : "";
       setFileIngestMsg(
-        `Ingested ${file.name}: ${r.chunks_added} segment(s), ${formatTokens(r.tokens_consumed)} tokens${embNote}. Open the Concepts tab if new hypotheses are not visible yet.`,
+        `Ingested ${file.name}: ${r.chunks_added} segment(s), ${formatTokens(r.tokens_consumed)} tokens.${extraConcepts}${note} Open the Concepts tab to review.`,
       );
       void loadHealth();
       void loadTabData();

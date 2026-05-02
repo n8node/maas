@@ -294,10 +294,11 @@ type IngestInput struct {
 }
 
 type IngestResult struct {
-	ChunksAdded    int
-	TokensConsumed int64
-	// SourceID is set for wiki ingests (wiki_sources.id). Zero for RAG JSON ingest.
-	SourceID uuid.UUID
+	ChunksAdded        int
+	TokensConsumed     int64
+	SourceID           uuid.UUID // wiki_sources.id for wiki ingests; zero for RAG JSON ingest.
+	WikiConceptsAdded  int       // concepts inserted by auto-extract (wiki only)
+	WikiExtractionNote string    // non-empty if extraction skipped/failed (wiki only)
 }
 
 func (s *Service) Ingest(ctx context.Context, userID, instanceID uuid.UUID, in IngestInput) (*IngestResult, error) {

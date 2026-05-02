@@ -246,8 +246,10 @@ func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{
 		"data": map[string]any{
-			"chunks_added":    res.ChunksAdded,
-			"tokens_consumed": res.TokensConsumed,
+			"chunks_added":           res.ChunksAdded,
+			"tokens_consumed":      res.TokensConsumed,
+			"wiki_concepts_added":  res.WikiConceptsAdded,
+			"wiki_extraction_note": res.WikiExtractionNote,
 		},
 	})
 }
@@ -378,10 +380,12 @@ func (h *Instances) IngestFile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{
-		"source_id":        res.SourceID.String(),
-		"chunks_added":     res.ChunksAdded,
-		"tokens_consumed":  res.TokensConsumed,
-		"embedding_model":  res.EmbeddingModel,
+		"source_id":              res.SourceID.String(),
+		"chunks_added":         res.ChunksAdded,
+		"tokens_consumed":      res.TokensConsumed,
+		"embedding_model":      res.EmbeddingModel,
+		"wiki_concepts_added":  res.WikiConceptsAdded,
+		"wiki_extraction_note": res.WikiExtractionNote,
 	}})
 }
 

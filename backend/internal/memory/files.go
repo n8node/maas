@@ -18,10 +18,12 @@ import (
 const embedBatchSize = 32
 
 type FileIngestResult struct {
-	SourceID       uuid.UUID
-	ChunksAdded    int
-	TokensConsumed int64
-	EmbeddingModel string
+	SourceID             uuid.UUID
+	ChunksAdded          int
+	TokensConsumed       int64
+	EmbeddingModel       string
+	WikiConceptsAdded    int
+	WikiExtractionNote   string
 }
 
 type FileIngestInput struct {
@@ -68,10 +70,12 @@ func (s *Service) IngestFile(ctx context.Context, userID, instanceID uuid.UUID, 
 			return nil, err
 		}
 		return &FileIngestResult{
-			SourceID:       res.SourceID,
-			ChunksAdded:    res.ChunksAdded,
-			TokensConsumed: res.TokensConsumed,
-			EmbeddingModel: "",
+			SourceID:             res.SourceID,
+			ChunksAdded:          res.ChunksAdded,
+			TokensConsumed:       res.TokensConsumed,
+			EmbeddingModel:       "",
+			WikiConceptsAdded:    res.WikiConceptsAdded,
+			WikiExtractionNote:   res.WikiExtractionNote,
 		}, nil
 	case "rag":
 		if s.embed == nil {

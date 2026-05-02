@@ -595,8 +595,9 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       Drop files or click to browse
                     </div>
                     <p className="text-[11px] text-subtle">
-                      Formats follow your plan (documents, audio, video). Queued here for reference — upload from the
-                      instance Playground after creation.
+                      For Wiki instances only file names are saved with the instance as a checklist — content is not uploaded
+                      until you use <strong className="font-medium text-ink">Upload document</strong> or paste text in the
+                      Playground after creation.
                     </p>
                   </label>
                   {wizFiles.length > 0 ? (
@@ -686,7 +687,8 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </div>
 
                 <div className="mt-4 rounded-lg bg-[#e6f1fb] px-3.5 py-2.5 text-[12px] leading-snug text-accent">
-                  After creation you&apos;ll open the Playground; file ingestion uses your instance API from there.
+                  After creation, open the Playground and ingest files with <strong className="font-medium">Upload document</strong>{" "}
+                  or paste text. Wizard file names are reminders only.
                 </div>
 
                 {err ? (

@@ -306,6 +306,8 @@ export async function deleteInstance(token: string, id: string): Promise<void> {
 export type IngestResultDTO = {
   chunks_added: number;
   tokens_consumed: number;
+  wiki_concepts_added?: number;
+  wiki_extraction_note?: string;
 };
 
 export async function ingestInstance(
@@ -575,6 +577,8 @@ export type FileIngestResultDTO = {
   chunks_added: number;
   tokens_consumed: number;
   embedding_model: string;
+  wiki_concepts_added?: number;
+  wiki_extraction_note?: string;
 };
 
 export async function ingestInstanceFile(

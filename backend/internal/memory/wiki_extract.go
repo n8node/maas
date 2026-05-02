@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -74,14 +76,58 @@ func normConceptType(t string) string {
 	return "fact"
 }
 
-// runWikiExtraction calls the chat model to propose concepts and applies router-lite rules (dedupe by title).
-func (s *Service) runWikiExtraction(ctx context.Context, userID uuid.UUID, inst *models.MemoryInstance, sourceID uuid.UUID, plainText string) (extraTok int64, err error) {
+func stripMarkdownFences(s string) string {
+	s = strings.TrimSpace(s)
+	s = strings.TrimPrefix(s, "\ufeff")
+	s = strings.TrimPrefix(s, "```json")
+	s = strings.TrimPrefix(s, "```JSON")
+	s = strings.TrimPrefix(s, "```")
+	s = strings.TrimSuffix(s, "```")
+	return strings.TrimSpace(s)
+}
+
+// parseExtractedConceptsJSON tolerates markdown fences, BOM, and wrapper objects.
+func parseExtractedConceptsJSON(raw string) ([]extractedConceptLite, error) {
+	raw = stripMarkdownFences(raw)
+	var items []extractedConceptLite
+	if err := json.Unmarshal([]byte(raw), &items); err == nil {
+		return items, nil
+	}
+	var wrap struct {
+		Items    []extractedConceptLite `json:"items"`
+		Concepts []extractedConceptLite `json:"concepts"`
+		Data     []extractedConceptLite `json:"data"`
+	}
+	if err := json.Unmarshal([]byte(raw), &wrap); err == nil {
+		if len(wrap.Items) > 0 {
+			return wrap.Items, nil
+		}
+		if len(wrap.Concepts) > 0 {
+			return wrap.Concepts, nil
+		}
+		if len(wrap.Data) > 0 {
+			return wrap.Data, nil
+		}
+	}
+	i := strings.Index(raw, "[")
+	j := strings.LastIndex(raw, "]")
+	if i >= 0 && j > i {
+		slice := raw[i : j+1]
+		if err := json.Unmarshal([]byte(slice), &items); err == nil {
+			return items, nil
+		}
+	}
+	return nil, fmt.Errorf("could not parse JSON array of concepts")
+}
+
+// wikiLLMExtractCandidates calls the chat model; does not write DB or bill tokens.
+func (s *Service) wikiLLMExtractCandidates(ctx context.Context, inst *models.MemoryInstance, sourceID uuid.UUID, plainText string) ([]extractedConceptLite, int64, error) {
 	if s.chat == nil || len(strings.TrimSpace(plainText)) == 0 {
-		return 0, nil
+		return nil, 0, fmt.Errorf("chat not configured")
 	}
 	system := `You extract candidate knowledge concepts from the user's text for a wiki memory system.
 Return ONLY a JSON array (no markdown fences), each item: {"title":"short name","description":"1-3 sentences","concept_type":"one of: fact,entity,event,goal,belief,tension,project,pattern"}.
-At most 12 items. Use clear, non-overlapping titles. If nothing useful, return [].`
+Use UTF-8. At most 12 items. Use clear, non-overlapping titles. If nothing useful, return [].`
 	user := "Text:\n" + plainText
 	if len(user) > 12000 {
 		user = user[:12000] + "…"
@@ -89,29 +135,23 @@ At most 12 items. Use clear, non-overlapping titles. If nothing useful, return [
 	out, usage, err := s.chat.Complete(ctx, system, user)
 	if err != nil {
 		_ = s.wikiLog(ctx, inst.ID, "extraction", "extract.failed", "source", &sourceID, map[string]any{"error": err.Error()}, "")
-		return 0, err
-	}
-	raw := strings.TrimSpace(out)
-	raw = strings.TrimPrefix(raw, "```json")
-	raw = strings.TrimPrefix(raw, "```")
-	raw = strings.TrimSuffix(raw, "```")
-	raw = strings.TrimSpace(raw)
-	var items []extractedConceptLite
-	if err := json.Unmarshal([]byte(raw), &items); err != nil {
-		_ = s.wikiLog(ctx, inst.ID, "extraction", "extract.parse_failed", "source", &sourceID, map[string]any{"snippet": truncStr(raw, 200)}, err.Error())
-		return 0, err
+		return nil, 0, err
 	}
 	tok := usage.TotalTokens
 	if tok < 1 {
 		tok = 1
 	}
-	if err := s.bill.ConsumeTokens(ctx, userID, tok); err != nil {
-		_ = s.wikiLog(ctx, inst.ID, "extraction", "extract.tokens_denied", "source", &sourceID, map[string]any{"tokens": tok}, "")
-		return 0, err
+	items, err := parseExtractedConceptsJSON(out)
+	if err != nil {
+		_ = s.wikiLog(ctx, inst.ID, "extraction", "extract.parse_failed", "source", &sourceID, map[string]any{"snippet": truncStr(stripMarkdownFences(out), 200)}, err.Error())
+		return nil, 0, err
 	}
-	extraTok = tok
+	return items, tok, nil
+}
 
-	instanceID := inst.ID
+// wikiApplyCandidates inserts extracted concepts (dedupe by title); returns rows inserted.
+func (s *Service) wikiApplyCandidates(ctx context.Context, instanceID, sourceID uuid.UUID, items []extractedConceptLite) int {
+	inserted := 0
 	for _, it := range items {
 		title := strings.TrimSpace(it.Title)
 		if title == "" {
@@ -146,10 +186,10 @@ At most 12 items. Use clear, non-overlapping titles. If nothing useful, return [
 		if err != nil {
 			continue
 		}
+		inserted++
 		_ = s.wikiLog(ctx, instanceID, "router", "concept.create", "concept", &cid, map[string]any{"title": title, "concept_type": ct}, "extracted + router")
 	}
-	_ = s.wikiLog(ctx, instanceID, "extraction", "extract.complete", "source", &sourceID, map[string]any{"candidates": len(items), "tokens": extraTok}, "")
-	return extraTok, nil
+	return inserted
 }
 
 func truncStr(s string, n int) string {
@@ -158,4 +198,17 @@ func truncStr(s string, n int) string {
 		return s
 	}
 	return string(r[:n]) + "…"
+}
+
+func humanShortErr(err error) string {
+	if err == nil {
+		return ""
+	}
+	s := err.Error()
+	const max = 160
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	r := []rune(s)
+	return string(r[:max]) + "…"
 }

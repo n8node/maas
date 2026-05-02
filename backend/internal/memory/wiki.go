@@ -98,30 +98,51 @@ func (s *Service) ingestWiki(ctx context.Context, userID uuid.UUID, inst *models
 	}
 
 	nChunks := len(insertedSeg)
-	if err := s.bill.ConsumeTokens(ctx, userID, totalTok); err != nil {
-		for _, sid := range insertedSeg {
-			_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_segments WHERE id = $1`, sid)
-		}
-		for _, cid := range insertedConcept {
-			_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_concepts WHERE id = $1`, cid)
-		}
-		_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_sources WHERE id = $1`, srcID)
-		return nil, err
-	}
-
 	_ = s.wikiLog(ctx, instanceID, "ingest", "ingest.complete", "source", &srcID, map[string]any{
 		"segments": len(insertedSeg), "manual_concepts": len(insertedConcept), "title": title,
 	}, "")
 
-	var extra int64
+	var conceptsAdded int
+	var extractNote string
+	var llmTok int64
+	var candidates []extractedConceptLite
+
 	if wikiConfigAutoExtract(inst.Config) && s.chat != nil {
-		ex, err := s.runWikiExtraction(ctx, userID, inst, srcID, text)
-		if err == nil {
-			extra = ex
+		items, tok, err := s.wikiLLMExtractCandidates(ctx, inst, srcID, text)
+		if err != nil {
+			extractNote = "Concept extraction failed: " + humanShortErr(err)
+			llmTok = 0
+		} else {
+			candidates = items
+			llmTok = tok
+			if llmTok < 1 {
+				llmTok = 1
+			}
 		}
+	} else if wikiConfigAutoExtract(inst.Config) && s.chat == nil {
+		extractNote = "Concept extraction skipped: chat model unavailable (set OPENROUTER_API_KEY on the server)."
 	}
 
-	return &IngestResult{ChunksAdded: nChunks, TokensConsumed: totalTok + extra, SourceID: srcID}, nil
+	if err := s.bill.ConsumeTokens(ctx, userID, totalTok+llmTok); err != nil {
+		_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_concepts WHERE source_id = $1`, srcID)
+		_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_sources WHERE id = $1`, srcID)
+		return nil, err
+	}
+
+	if len(candidates) > 0 {
+		conceptsAdded = s.wikiApplyCandidates(ctx, instanceID, srcID, candidates)
+		_ = s.wikiLog(ctx, instanceID, "extraction", "extract.complete", "source", &srcID, map[string]any{
+			"candidates": len(candidates), "inserted": conceptsAdded, "tokens": llmTok,
+		}, "")
+	}
+
+	return &IngestResult{
+		ChunksAdded:        nChunks,
+		TokensConsumed:     totalTok + llmTok,
+		SourceID:           srcID,
+		WikiConceptsAdded:  conceptsAdded + len(insertedConcept),
+		WikiExtractionNote: extractNote,
+	}, nil
 }
 
 func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {
