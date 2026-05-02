@@ -161,6 +161,7 @@ export function WikiInstancePanels({
   const [proposals, setProposals] = useState<WikiProposalDTO[]>([]);
   const [repairConcepts, setRepairConcepts] = useState<WikiConceptDTO[]>([]);
   const [triageBusy, setTriageBusy] = useState(false);
+  const [triageNotice, setTriageNotice] = useState<string | null>(null);
   const [gardenerPlanOk, setGardenerPlanOk] = useState<boolean | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
 
@@ -229,6 +230,12 @@ export function WikiInstancePanels({
       /* ignore */
     }
   }, [token, instanceId, tab, conceptSearch]);
+
+  useEffect(() => {
+    if (tab !== "gardener") {
+      setTriageNotice(null);
+    }
+  }, [tab]);
 
   useEffect(() => {
     void loadHealth();
@@ -353,8 +360,9 @@ export function WikiInstancePanels({
   async function onTriage() {
     if (!token) return;
     setTriageBusy(true);
+    setTriageNotice(null);
     try {
-      await postWikiGardenerTriage(token, instanceId);
+      const result = await postWikiGardenerTriage(token, instanceId);
       const [p, rc] = await Promise.all([
         getWikiProposals(token, instanceId, "pending"),
         getWikiRepairConcepts(token, instanceId),
@@ -364,6 +372,23 @@ export function WikiInstancePanels({
       setPendingProposalCount(p.length);
       void loadHealth();
       setActions(await getWikiActionLog(token, instanceId));
+
+      const parts = [
+        `Triage finished: ${result.proposals_added} new proposal(s) added`,
+        `(heuristic duplicate titles: ${result.heuristic_added}`,
+        `LLM suggestions: ${result.llm_added}).`,
+      ];
+      if (result.tokens_used > 0) {
+        parts.push(`LLM step used ${formatTokens(result.tokens_used)}.`);
+      }
+      let summary = parts.join(" ");
+      if (result.proposals_added === 0) {
+        summary +=
+          " That is normal if there are no duplicate titles among active concepts, the model found nothing to flag, or only the heuristic ran (no OpenRouter key on the server). Expand “How Gardener triage works” below.";
+      }
+      setTriageNotice(summary);
+    } catch (e) {
+      setTriageNotice(e instanceof Error ? e.message : "Triage failed");
     } finally {
       setTriageBusy(false);
     }
@@ -935,6 +960,38 @@ export function WikiInstancePanels({
                 </Link>
               </div>
             ) : null}
+
+            <details className="mb-4 rounded-lg border border-[#b5d4f4] bg-[#e6f1fb] px-4 py-3 text-[#185fa5]">
+              <summary className="cursor-pointer list-none text-[13px] font-medium [&::-webkit-details-marker]:hidden">
+                <span className="underline decoration-[#185fa5]/40 underline-offset-2">How Gardener triage works</span>
+              </summary>
+              <div className="mt-3 space-y-3 text-[12px] leading-relaxed text-[#185fa5]/95">
+                <p>
+                  <span className="font-medium text-[#185fa5]">What happens when you click Run triage</span> — Phase 0 only
+                  creates <em>suggestions</em>, nothing is merged or changed until you approve each proposal.
+                </p>
+                <ul className="list-disc space-y-1.5 pl-5">
+                  <li>
+                    <span className="font-medium">Heuristic pass</span> — finds multiple{" "}
+                    <strong>active</strong> concepts that share the same title (ignoring case and extra spaces) and suggests
+                    merging them.
+                  </li>
+                  <li>
+                    <span className="font-medium">LLM pass</span> — if the server has an OpenRouter API key, a model may
+                    suggest merges or state changes (e.g. stale / weak). If there is no key, only the heuristic pass runs.
+                  </li>
+                </ul>
+                <p className="font-medium text-[#185fa5]">Why you might get zero new proposals</p>
+                <ul className="list-disc space-y-1.5 pl-5">
+                  <li>No duplicate titles among your active concepts.</li>
+                  <li>The LLM returned an empty list — nothing looked worth flagging.</li>
+                  <li>Very few or no active concepts yet — ingest content and ensure concept extraction is enabled where needed.</li>
+                  <li>A pending merge for the same duplicate title already exists (we avoid duplicates).</li>
+                  <li>Only heuristic ran — no LLM — so you only see proposals when duplicate titles exist.</li>
+                </ul>
+              </div>
+            </details>
+
             <div
               className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#e8c9a0] px-4 py-3"
               style={{ background: "#faeeda" }}
@@ -944,6 +1001,13 @@ export function WikiInstancePanels({
                   {pendingProposalCount} proposal{pendingProposalCount === 1 ? "" : "s"} pending
                 </p>
                 <p className="text-[12px] text-[#633806]/90">Phase 0 triage (heuristic + optional LLM) — not applied until approved.</p>
+                {triageNotice ? (
+                  <p
+                    className={`mt-2 text-[12px] ${triageNotice.includes("Triage finished") ? "text-[#3b6d11]" : "text-[#a32d2d]"}`}
+                  >
+                    {triageNotice}
+                  </p>
+                ) : null}
               </div>
               <button
                 type="button"
