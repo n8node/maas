@@ -394,7 +394,7 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                       <h2 className="mb-3 text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">System status</h2>
                       <div className="space-y-3 rounded-lg border border-border bg-bg p-4 text-[12px]">
                         <div className="flex justify-between gap-4 border-b border-border pb-3">
-                          <span className="text-muted">OpenRouter balance</span>
+                          <span className="text-muted">LLM usage balance</span>
                           <span className="font-medium text-ink">—</span>
                         </div>
                         <div className="flex justify-between gap-4 border-b border-border pb-3">

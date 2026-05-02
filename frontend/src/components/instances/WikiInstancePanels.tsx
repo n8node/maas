@@ -509,7 +509,7 @@ export function WikiInstancePanels({
                 Ingest — concept extraction (SGR)
               </h2>
               <p className="mt-1 text-[12px] text-muted">
-                Text or uploaded documents become wiki segments; with OpenRouter, auto-extract proposes concepts (toggle in Settings).
+                Text or uploaded documents become wiki segments; auto-extract proposes concepts when enabled (toggle in Settings).
               </p>
               <form onSubmit={onIngest} className="mt-4 space-y-3">
                 <textarea

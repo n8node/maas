@@ -77,7 +77,7 @@ export function InstanceFilesPanel({ instanceId, instanceName }: Props) {
           <h2 className="text-[15px] font-medium text-ink">Files with embeddings</h2>
           <p className="mt-1 text-[12px] text-muted">
             Instance · <span className="text-ink">{instanceName}</span>. Upload text, Markdown, HTML, or DOCX (PDF coming
-            soon). Requires <code className="rounded bg-bg2 px-1 text-[11px]">OPENROUTER_API_KEY</code> on the server.
+            soon).
           </p>
         </div>
         <label className="inline-flex cursor-pointer items-center justify-center rounded-lg border border-border bg-bg px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2 disabled:opacity-50">

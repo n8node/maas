@@ -211,7 +211,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
               <section className="rounded-lg border border-border bg-bg p-5">
                 <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Ingest</h2>
                 <p className="mt-1 text-[12px] text-muted">
-                  Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with OpenRouter embeddings.
+                  Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with vector embeddings.
                 </p>
                 <form onSubmit={onIngest} className="mt-4 space-y-3">
                   <div>

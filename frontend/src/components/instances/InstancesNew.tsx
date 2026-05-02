@@ -46,7 +46,7 @@ const MEMORY_TYPES: Array<{
   },
 ];
 
-/** Stored in instance config; runtime chat/embeddings use server OPENROUTER_* (defaults: OpenAI via OpenRouter). */
+/** Default model ids stored in instance config; runtime follows server settings. */
 const DEFAULT_INSTANCE_MODEL_REFS = {
   extraction_model: "openai/gpt-4o-mini",
   embedding_model: "openai/text-embedding-3-small",
@@ -384,13 +384,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                           maxLength={128}
                         />
                       </div>
-                      <div className="rounded-lg border border-border bg-bg2 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
-                        Extraction and embeddings use{" "}
-                        <strong className="font-medium text-ink">OpenAI models via OpenRouter</strong> from server settings (
-                        <code className="rounded bg-bg px-1 font-mono text-[10px]">OPENROUTER_CHAT_MODEL</code>,{" "}
-                        <code className="rounded bg-bg px-1 font-mono text-[10px]">OPENROUTER_EMBEDDING_MODEL</code>). No need
-                        to pick models here.
-                      </div>
                     </div>
                   </section>
 
@@ -636,7 +629,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     [
                       ["Memory type", typeMeta.name],
                       ["Name", name.trim() || "—"],
-                      ["Models", "OpenAI via OpenRouter (server defaults)"],
+                      ["Models", "Mnemoniqa defaults"],
                       ["User_id scoping", userScoping ? "Enabled" : "Disabled"],
                       ["Session_id scoping", sessionScoping ? "Enabled" : "Disabled"],
                       ["Files at create", wizFiles.length ? `${wizFiles.length} file(s) — auto-ingest after Create` : "None"],
