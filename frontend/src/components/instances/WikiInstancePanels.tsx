@@ -7,11 +7,13 @@ import clsx from "clsx";
 import {
   approveWikiProposal,
   billingMeRequest,
+  deleteInstanceSource,
   getWikiActionLog,
   getWikiConcepts,
   getWikiHealth,
   getWikiProposals,
   getWikiRepairConcepts,
+  getWikiSources,
   ingestInstance,
   ingestInstanceFile,
   patchInstance,
@@ -25,12 +27,13 @@ import {
   type WikiConceptDTO,
   type WikiHealthDTO,
   type WikiProposalDTO,
+  type WikiSourceDTO,
 } from "@/lib/api";
 import { getToken } from "@/lib/token";
 import { formatTokens } from "@/lib/format";
 import { WikiHighlightedSnippet } from "@/components/instances/WikiHighlightedSnippet";
 
-type WikiTab = "playground" | "concepts" | "actionlog" | "gardener" | "settings";
+type WikiTab = "playground" | "documents" | "concepts" | "actionlog" | "gardener" | "settings";
 
 const wikiAccent = "#534ab7";
 const wikiAccentBg = "#eeedfe";
@@ -167,6 +170,11 @@ export function WikiInstancePanels({
   const [gardenerPlanOk, setGardenerPlanOk] = useState<boolean | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
 
+  const [wikiSources, setWikiSources] = useState<WikiSourceDTO[]>([]);
+  const [wikiSourcesLoading, setWikiSourcesLoading] = useState(false);
+  const [deletingWikiSourceId, setDeletingWikiSourceId] = useState<string | null>(null);
+  const [documentsMsg, setDocumentsMsg] = useState<string | null>(null);
+
   const autoExtract =
     typeof inst.config?.auto_extract === "boolean"
       ? (inst.config.auto_extract as boolean)
@@ -208,6 +216,18 @@ export function WikiInstancePanels({
     }
   }, [token]);
 
+  const loadWikiDocuments = useCallback(async () => {
+    if (!token) return;
+    setWikiSourcesLoading(true);
+    try {
+      setWikiSources(await getWikiSources(token, instanceId));
+    } catch {
+      setWikiSources([]);
+    } finally {
+      setWikiSourcesLoading(false);
+    }
+  }, [token, instanceId]);
+
   const loadTabData = useCallback(async () => {
     if (!token) return;
     try {
@@ -234,6 +254,33 @@ export function WikiInstancePanels({
     }
   }, [token, instanceId, tab, conceptSearch, proposalListFilter, loadPendingProposals]);
 
+  const onDeleteWikiSource = useCallback(
+    async (sourceId: string, title: string) => {
+      if (!token) return;
+      const label = title.trim() || "this source";
+      if (
+        !window.confirm(
+          `Delete "${label}" and all wiki segments? Concepts may lose source linkage. This cannot be undone.`,
+        )
+      ) {
+        return;
+      }
+      setDeletingWikiSourceId(sourceId);
+      setDocumentsMsg(null);
+      try {
+        await deleteInstanceSource(token, instanceId, sourceId);
+        await loadWikiDocuments();
+        void loadHealth();
+        void loadTabData();
+      } catch (e) {
+        setDocumentsMsg(e instanceof Error ? e.message : "Delete failed");
+      } finally {
+        setDeletingWikiSourceId(null);
+      }
+    },
+    [token, instanceId, loadWikiDocuments, loadHealth, loadTabData],
+  );
+
   useEffect(() => {
     if (tab !== "gardener") {
       setTriageNotice(null);
@@ -251,10 +298,14 @@ export function WikiInstancePanels({
   }, [loadTabData]);
 
   useEffect(() => {
-    if (tab === "playground" && (ingestMsg || fileIngestMsg)) {
-      void loadTabData();
+    if (tab === "documents") void loadWikiDocuments();
+  }, [tab, loadWikiDocuments]);
+
+  useEffect(() => {
+    if (ingestMsg || fileIngestMsg) {
+      void loadWikiDocuments();
     }
-  }, [ingestMsg, fileIngestMsg, tab, loadTabData]);
+  }, [ingestMsg, fileIngestMsg, loadWikiDocuments]);
 
   async function onToggleAutoExtract() {
     if (!token) return;
@@ -305,6 +356,7 @@ export function WikiInstancePanels({
       setIngestText("");
       void loadHealth();
       void loadTabData();
+      void loadWikiDocuments();
       void loadPendingProposals();
     } catch (e) {
       setIngestMsg(e instanceof Error ? e.message : "Ingest failed");
@@ -332,6 +384,7 @@ export function WikiInstancePanels({
       );
       void loadHealth();
       void loadTabData();
+      void loadWikiDocuments();
       void loadPendingProposals();
     } catch (err) {
       setFileIngestMsg(err instanceof Error ? err.message : "Upload failed");
@@ -417,6 +470,7 @@ export function WikiInstancePanels({
 
   const tabs: [WikiTab, string][] = [
     ["playground", "Playground"],
+    ["documents", "Documents"],
     ["concepts", "Concepts"],
     ["actionlog", "Action log"],
     ["gardener", "Gardener"],
@@ -803,6 +857,72 @@ export function WikiInstancePanels({
                 ) : null}
               </form>
             </section>
+          </div>
+        ) : null}
+
+        {tab === "documents" ? (
+          <div className="w-full min-w-0 px-4 py-6 sm:px-6 lg:px-7">
+            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h2 className="text-[15px] font-medium text-ink">Documents</h2>
+                <p className="mt-1 text-[12px] text-muted">
+                  Ingested sources and segment counts; delete removes segments (concept source links are cleared).
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTab("playground")}
+                className="inline-flex items-center justify-center rounded-lg border border-border2 bg-bg px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2"
+              >
+                Ingest in Playground
+              </button>
+            </div>
+            {documentsMsg ? <p className="mb-4 text-[12px] text-error">{documentsMsg}</p> : null}
+            {wikiSourcesLoading ? (
+              <p className="text-[13px] text-muted">Loading…</p>
+            ) : wikiSources.length === 0 ? (
+              <div className="rounded-[12px] border border-border bg-bg px-6 py-12 text-center text-[13px] text-muted">
+                No documents yet. Paste text or upload a file on the Playground tab.
+              </div>
+            ) : (
+              <div className="overflow-x-auto rounded-[12px] border border-border bg-bg">
+                <table className="w-full min-w-[640px] text-left text-[13px]">
+                  <thead className="border-b border-border bg-bg2 text-[10px] font-medium uppercase tracking-wide text-subtle">
+                    <tr>
+                      <th className="px-4 py-2.5">Title</th>
+                      <th className="px-4 py-2.5">Segments</th>
+                      <th className="px-4 py-2.5">user_id</th>
+                      <th className="px-4 py-2.5">Added</th>
+                      <th className="px-4 py-2.5 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wikiSources.map((s) => (
+                      <tr key={s.id} className="border-b border-border last:border-0 hover:bg-bg2/50">
+                        <td className="max-w-[280px] truncate px-4 py-3 font-medium text-ink" title={s.title}>
+                          {s.title || "—"}
+                        </td>
+                        <td className="px-4 py-3">{s.segment_count}</td>
+                        <td className="max-w-[160px] truncate px-4 py-3 font-mono text-[12px] text-muted" title={s.user_scope}>
+                          {s.user_scope?.trim() ? s.user_scope : "—"}
+                        </td>
+                        <td className="px-4 py-3 text-[12px] text-subtle">{formatRelativeTime(s.created_at)}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-right">
+                          <button
+                            type="button"
+                            disabled={deletingWikiSourceId === s.id}
+                            onClick={() => void onDeleteWikiSource(s.id, s.title)}
+                            className="rounded-md border border-[#f09595] bg-[#fcebeb] px-2.5 py-1 text-[11px] font-medium text-[#a32d2d] hover:opacity-90 disabled:opacity-50"
+                          >
+                            {deletingWikiSourceId === s.id ? "…" : "Delete"}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         ) : null}
 

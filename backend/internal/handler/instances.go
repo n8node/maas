@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -449,7 +450,24 @@ func (h *Instances) DeleteSource(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid source id")
 		return
 	}
-	err = h.svc.DeleteSource(r.Context(), p.UserID, iid, sid)
+	inst, err := h.svc.Get(r.Context(), p.UserID, iid)
+	if err != nil {
+		if errors.Is(err, memory.ErrNotFound) {
+			WriteError(w, http.StatusNotFound, "NOT_FOUND", "instance not found")
+			return
+		}
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	switch strings.ToLower(strings.TrimSpace(inst.MemoryType)) {
+	case "rag":
+		err = h.svc.DeleteSource(r.Context(), p.UserID, iid, sid)
+	case "wiki":
+		err = h.svc.DeleteWikiSource(r.Context(), p.UserID, iid, sid)
+	default:
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "sources can only be deleted for rag or wiki instances")
+		return
+	}
 	if errors.Is(err, memory.ErrNotFound) {
 		WriteError(w, http.StatusNotFound, "NOT_FOUND", "source not found")
 		return

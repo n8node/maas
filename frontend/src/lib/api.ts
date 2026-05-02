@@ -693,7 +693,12 @@ export async function listSources(token: string, instanceId: string): Promise<RA
   return data.data.sources;
 }
 
-export async function deleteRagSource(token: string, instanceId: string, sourceId: string): Promise<void> {
+/** DELETE source by id — RAG file sources and Wiki sources use the same route. */
+export async function deleteInstanceSource(
+  token: string,
+  instanceId: string,
+  sourceId: string,
+): Promise<void> {
   const res = await fetch(
     `${API_BASE}/instances/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(sourceId)}`,
     {
@@ -706,6 +711,9 @@ export async function deleteRagSource(token: string, instanceId: string, sourceI
     throw new Error(data.error?.message ?? "Could not delete document");
   }
 }
+
+/** @deprecated Prefer deleteInstanceSource — same behavior. */
+export const deleteRagSource = deleteInstanceSource;
 
 export type FileIngestResultDTO = {
   source_id: string;

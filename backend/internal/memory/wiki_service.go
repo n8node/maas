@@ -80,6 +80,25 @@ func (s *Service) ListWikiSources(ctx context.Context, userID, instanceID uuid.U
 	return out, rows.Err()
 }
 
+// DeleteWikiSource removes a wiki source and cascaded segments; concepts keep source_id cleared (SET NULL).
+func (s *Service) DeleteWikiSource(ctx context.Context, userID, instanceID, sourceID uuid.UUID) error {
+	if _, err := s.requireWikiInstance(ctx, userID, instanceID); err != nil {
+		return err
+	}
+	ct, err := s.pool.Exec(ctx, `
+		DELETE FROM wiki_sources s
+		USING memory_instances m
+		WHERE s.id = $1 AND s.instance_id = $2 AND m.id = s.instance_id AND m.user_id = $3`,
+		sourceID, instanceID, userID)
+	if err != nil {
+		return err
+	}
+	if ct.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
+
 // WikiConceptRow for list/detail API.
 type WikiConceptRow struct {
 	ID           uuid.UUID  `json:"id"`
