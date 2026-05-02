@@ -73,7 +73,7 @@ function planBarClass(pct: number): string {
   return "bg-success";
 }
 
-export function BillingDashboard({ user }: { user: MeUser }) {
+export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: () => void }) {
   const token = getToken() ?? "";
 
   const [tab, setTab] = useState<TabId>("overview");
@@ -193,7 +193,13 @@ export function BillingDashboard({ user }: { user: MeUser }) {
   if (loading) {
     return (
       <div className="flex min-h-screen bg-bg3 pl-[220px]">
-        <DashboardSidebar userEmail={user.email} planLabel={planLabel} isSuperadmin={user.role === "superadmin"} />
+        <DashboardSidebar
+          userEmail={user.email}
+          planLabel={planLabel}
+          instanceCount={0}
+          isSuperadmin={user.role === "superadmin"}
+          onLogout={onLogout}
+        />
         <div className="flex flex-1 items-center justify-center">
           <p className="text-sm text-muted">Loading billing…</p>
         </div>
@@ -204,7 +210,13 @@ export function BillingDashboard({ user }: { user: MeUser }) {
   if (err || !billing) {
     return (
       <div className="flex min-h-screen bg-bg3 pl-[220px]">
-        <DashboardSidebar userEmail={user.email} planLabel={planLabel} isSuperadmin={user.role === "superadmin"} />
+        <DashboardSidebar
+          userEmail={user.email}
+          planLabel={planLabel}
+          instanceCount={0}
+          isSuperadmin={user.role === "superadmin"}
+          onLogout={onLogout}
+        />
         <div className="flex flex-1 flex-col items-center justify-center gap-3 px-8">
           <p className="text-sm text-error">{err ?? "No data"}</p>
           <Link href="/login" className="text-sm text-accent underline">
@@ -217,7 +229,13 @@ export function BillingDashboard({ user }: { user: MeUser }) {
 
   return (
     <div className="min-h-screen bg-bg3 pl-[220px]">
-      <DashboardSidebar userEmail={user.email} planLabel={planLabel} isSuperadmin={user.role === "superadmin"} />
+      <DashboardSidebar
+          userEmail={user.email}
+          planLabel={planLabel}
+          instanceCount={0}
+          isSuperadmin={user.role === "superadmin"}
+          onLogout={onLogout}
+        />
 
       <div className="ml-0 flex min-h-screen flex-1 flex-col">
         <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">

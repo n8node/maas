@@ -1,5 +1,7 @@
 "use client";
 
+import clsx from "clsx";
+import { BookOpen, Check, Plus } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -22,6 +24,10 @@ function planUsageBarClass(pct: number): string {
   if (pct >= 70) return "bg-warn";
   return "bg-success";
 }
+
+/** Until ingest/instance APIs exist. */
+const INSTANCE_COUNT_PLACEHOLDER = 0;
+const STORAGE_USED_MB_PLACEHOLDER = 0;
 
 type Props = {
   user: MeUser;
@@ -62,33 +68,55 @@ export function OverviewDashboard({ user, onLogout }: Props) {
   const showTokenWarn = Boolean(plan && monthly > 0 && pctPlanUsed >= 70);
 
   const renewalLabel = sub?.current_period_end ? formatRenewalDate(sub.current_period_end) : "—";
-  const planLabel = plan ? `${plan.name} plan` : "No plan";
+  const planLabel = plan ? `${plan.name} plan` : "Free plan";
 
-  const instancesCap = plan?.max_instances;
-  const storageCapLabel = plan ? formatStorageGb(plan.max_storage_mb) : "—";
+  const instancesCap = plan?.max_instances ?? 2;
+  const instancesDisplayCap = instancesCap >= 100000 ? "∞" : instancesCap;
+  const storageCapMb = plan?.max_storage_mb ?? 0;
+  const storageCapLabel = storageCapMb > 0 ? formatStorageGb(storageCapMb) : "—";
+  const storageUsedPct =
+    storageCapMb > 0 ? Math.min(100, Math.round((STORAGE_USED_MB_PLACEHOLDER / storageCapMb) * 100)) : 0;
+
+  const localPart = user.email.split("@")[0] ?? user.email;
+  const isSuperadmin = user.role === "superadmin";
 
   return (
     <div className="min-h-screen bg-bg3 pl-[220px]">
-      <DashboardSidebar userEmail={user.email} planLabel={planLabel} isSuperadmin={user.role === "superadmin"} />
+      <DashboardSidebar
+        userEmail={user.email}
+        planLabel={planLabel}
+        instanceCount={INSTANCE_COUNT_PLACEHOLDER}
+        isSuperadmin={isSuperadmin}
+        onLogout={onLogout}
+      />
 
       <div className="flex min-h-screen flex-col">
         <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">
           <span className="text-[15px] font-medium text-ink">Overview</span>
-          <button
-            type="button"
-            onClick={onLogout}
-            className="rounded-lg border border-border2 px-3 py-1.5 text-[12px] text-muted hover:bg-bg2"
-          >
-            Sign out
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              title="Documentation coming soon"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border2 bg-bg px-3 py-1.5 text-[12px] text-ink hover:bg-bg2"
+            >
+              <BookOpen className="h-3.5 w-3.5 text-muted" strokeWidth={1.75} aria-hidden />
+              Docs
+            </button>
+            <button
+              type="button"
+              title="Coming soon"
+              className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12px] font-medium text-bg opacity-80"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              New instance
+            </button>
+          </div>
         </header>
 
-        <div className="max-w-[900px] p-7 text-[13px]">
+        <div className="max-w-6xl p-7 text-[13px]">
           <div className="mb-6">
-            <h1 className="text-[15px] font-medium text-ink">
-              Hello, {user.email.split("@")[0]}
-            </h1>
-            <p className="mt-1 text-xs text-subtle">Memory infrastructure for AI agents — your workspace at a glance.</p>
+            <h1 className="text-2xl font-medium tracking-tight text-ink sm:text-[26px]">Hello, {localPart}</h1>
+            <p className="mt-1 text-sm text-subtle">Memory infrastructure for AI agents — your workspace at a glance.</p>
           </div>
 
           {err ? (
@@ -117,124 +145,257 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                 </div>
               ) : null}
 
-              <section className="mb-7">
-                <h2 className="mb-3.5 text-[13px] font-medium text-ink">Summary</h2>
+              <section className="mb-8">
+                <h2 className="mb-3.5 text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Summary</h2>
                 <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
                   <div className="rounded-lg border border-border bg-bg p-4">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Tokens available</div>
-                    <div className="mt-1 text-xl font-medium tracking-tight text-ink">
+                    <div className="mt-1 text-2xl font-medium tracking-tight text-ink">
                       {billing != null ? formatTokens(billing.tokens_remaining) : "—"}
                     </div>
                     <div className="mt-2 h-0.5 overflow-hidden rounded-sm bg-bg2">
                       {monthly > 0 ? (
                         <div
-                          className={`h-full rounded-sm ${planUsageBarClass(pctPlanUsed)}`}
+                          className={clsx("h-full rounded-sm", planUsageBarClass(pctPlanUsed))}
                           style={{ width: `${pctPlanUsed}%` }}
                         />
                       ) : null}
                     </div>
-                    <div className="mt-1 text-[10px] text-subtle">
-                      {monthly > 0 ? `${Math.round(pctPlanUsed)}% of monthly allocation used` : "—"}
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span className="text-[11px] text-subtle">
+                        {monthly > 0 ? `${Math.round(pctPlanUsed)}% of monthly allocation used` : "0% of monthly allocation used"}
+                      </span>
+                      <span className="rounded-md bg-success-bg px-2 py-0.5 text-[10px] font-medium text-success-text">
+                        {plan?.name ?? "Free"} plan
+                      </span>
                     </div>
                   </div>
 
                   <div className="rounded-lg border border-border bg-bg p-4">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Current plan</div>
-                    <div className="mt-1 text-xl font-medium tracking-tight text-ink">{plan?.name ?? "—"}</div>
-                    <div className="mt-1 text-[11px] text-subtle">
+                    <div className="mt-1 text-2xl font-medium tracking-tight text-ink">{plan?.name ?? "—"}</div>
+                    <div className="mt-1 text-[12px] text-subtle">
                       {plan ? (
                         <>
                           {formatRub(plan.price_monthly_rub)}/mo · renews {renewalLabel}
                         </>
                       ) : (
-                        "Subscribe to unlock higher limits"
+                        "Choose a plan in Billing"
                       )}
                     </div>
+                    <Link
+                      href="/billing"
+                      className="mt-3 inline-flex text-[12px] font-medium text-accent hover:underline"
+                    >
+                      Upgrade plan →
+                    </Link>
                   </div>
 
                   <div className="rounded-lg border border-border bg-bg p-4">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Instances</div>
-                    <div className="mt-1 text-xl font-medium tracking-tight text-ink">
-                      {instancesCap != null && instancesCap < 100000 ? (
-                        <>— / {instancesCap}</>
-                      ) : (
-                        <>— / ∞</>
-                      )}
+                    <div className="mt-1 text-2xl font-medium tracking-tight text-ink">
+                      {INSTANCE_COUNT_PLACEHOLDER} / {instancesDisplayCap}
                     </div>
-                    <div className="mt-1 text-[11px] text-subtle">Usage tracking coming soon</div>
+                    <p className="mt-1 text-[12px] text-subtle">No instances created yet</p>
+                    <button
+                      type="button"
+                      title="Coming soon"
+                      className="mt-3 cursor-not-allowed text-[12px] font-medium text-accent opacity-60"
+                    >
+                      Create first →
+                    </button>
                   </div>
 
                   <div className="rounded-lg border border-border bg-bg p-4">
                     <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Storage cap</div>
-                    <div className="mt-1 text-xl font-medium tracking-tight text-ink">{storageCapLabel}</div>
-                    <div className="mt-1 text-[11px] text-subtle">Usage tracking coming soon</div>
+                    <div className="mt-1 text-2xl font-medium tracking-tight text-ink">{storageCapLabel}</div>
+                    <p className="mt-1 text-[12px] text-subtle">
+                      {STORAGE_USED_MB_PLACEHOLDER} MB used · {plan?.slug === "free" || !plan ? "free plan" : "your plan"}
+                    </p>
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="rounded-md bg-success-bg px-2 py-0.5 text-[10px] font-medium text-success-text">
+                        {storageCapMb > 0 ? `${storageUsedPct}% used` : "0% used"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </section>
 
-              <section className="mb-7">
-                <h2 className="mb-3.5 text-[13px] font-medium text-ink">Quick actions</h2>
-                <div className="flex flex-wrap gap-2.5">
+              <section className="mb-8">
+                <h2 className="mb-3.5 text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Quick actions</h2>
+                <div className="flex flex-wrap gap-2">
                   <Link
                     href="/billing"
-                    className="rounded-lg bg-ink px-4 py-2.5 text-[12px] font-medium text-bg hover:opacity-90"
+                    className="rounded-full bg-ink px-4 py-2 text-[12px] font-medium text-bg hover:opacity-90"
                   >
                     Billing &amp; usage
                   </Link>
-                  <span className="cursor-not-allowed rounded-lg border border-border2 px-4 py-2.5 text-[12px] text-subtle opacity-60">
-                    API keys (soon)
+                  <span className="cursor-not-allowed rounded-full border border-border2 px-4 py-2 text-[12px] text-subtle">
+                    API Keys
                   </span>
-                  <span className="cursor-not-allowed rounded-lg border border-border2 px-4 py-2.5 text-[12px] text-subtle opacity-60">
+                  <span className="cursor-not-allowed rounded-full border border-border2 px-4 py-2 text-[12px] text-subtle">
+                    New instance
+                  </span>
+                  <span className="cursor-not-allowed rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-subtle">
                     Docs (soon)
+                  </span>
+                  <span className="cursor-not-allowed rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-subtle">
+                    Playground (soon)
                   </span>
                 </div>
               </section>
 
-              <section className="mb-7">
-                <h2 className="mb-3.5 text-[13px] font-medium text-ink">Get started</h2>
-                <div className="rounded-lg border border-border bg-bg p-5">
-                  <ol className="space-y-4">
-                    {[
-                      { n: 1, title: "Confirm billing & tokens", body: "Review your plan and token balance under Billing." },
-                      { n: 2, title: "Create a memory instance", body: "Spin up RAG, Wiki, or other memory types for your product." },
-                      { n: 3, title: "Issue an API key", body: "Connect your backend or agents securely." },
-                      { n: 4, title: "Ingest & query", body: "Use the playground to ingest content and run queries with citations." },
-                    ].map((step) => (
-                      <li key={step.n} className="flex gap-3">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border2 bg-bg2 text-[11px] font-medium text-ink">
-                          {step.n}
-                        </div>
-                        <div>
-                          <div className="text-[13px] font-medium text-ink">{step.title}</div>
-                          <div className="mt-0.5 text-[12px] text-muted">{step.body}</div>
-                        </div>
-                      </li>
-                    ))}
+              <section className="mb-8">
+                <h2 className="mb-3.5 text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Get started</h2>
+                <div className="rounded-lg border border-border bg-bg p-5 sm:p-6">
+                  <ol className="space-y-5">
+                    <li className="flex gap-3">
+                      <div
+                        className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-success text-bg"
+                        aria-hidden
+                      >
+                        <Check className="h-4 w-4" strokeWidth={2.5} />
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-medium text-ink">Create your account</div>
+                        <p className="mt-0.5 text-[12px] text-muted">You&apos;re in. Your workspace is ready to go.</p>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border2 bg-bg2 text-[11px] font-medium text-ink">
+                        2
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-medium text-ink">Confirm billing &amp; tokens</div>
+                        <p className="mt-0.5 text-[12px] text-muted">
+                          Review your plan and token balance. Free plan includes 100K tokens to start.
+                        </p>
+                        <Link href="/billing" className="mt-1.5 inline-block text-[12px] font-medium text-accent hover:underline">
+                          Go to Billing →
+                        </Link>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border2 bg-bg2 text-[11px] font-medium text-ink">
+                        3
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-medium text-ink">Create a memory instance</div>
+                        <p className="mt-0.5 text-[12px] text-muted">
+                          Spin up RAG, Wiki, or other memory types for your product. Takes about 30 seconds.
+                        </p>
+                        <span className="mt-1.5 inline-block cursor-not-allowed text-[12px] font-medium text-accent opacity-50">
+                          Create instance →
+                        </span>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border2 bg-bg2 text-[11px] font-medium text-ink">
+                        4
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-medium text-ink">Issue an API key</div>
+                        <p className="mt-0.5 text-[12px] text-muted">Connect your backend or agents securely using a scoped API key.</p>
+                        <span className="mt-1.5 inline-block cursor-not-allowed text-[12px] font-medium text-accent opacity-50">
+                          Go to API Keys →
+                        </span>
+                      </div>
+                    </li>
+                    <li className="flex gap-3">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-border2 bg-bg2 text-[11px] font-medium text-ink">
+                        5
+                      </div>
+                      <div>
+                        <div className="text-[13px] font-medium text-ink">Ingest &amp; query</div>
+                        <p className="mt-0.5 text-[12px] text-muted">
+                          Use the playground to add data and run queries with citations from your agent. Playground coming soon.
+                        </p>
+                      </div>
+                    </li>
                   </ol>
                 </div>
               </section>
 
-              <section className="mb-7">
-                <h2 className="mb-3.5 text-[13px] font-medium text-ink">Recent activity</h2>
-                <div className="rounded-lg border border-dashed border-border2 bg-bg px-5 py-10 text-center text-[12px] text-muted">
-                  No activity yet. Ingest and query events will appear here in a future release.
-                </div>
-              </section>
-
-              {user.role === "superadmin" ? (
-                <section>
-                  <h2 className="mb-3.5 text-[13px] font-medium text-ink">Administration</h2>
-                  <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-bg p-4">
-                    <p className="text-[12px] text-muted">Manage catalog plans and pricing.</p>
-                    <Link
-                      href="/superadmin"
-                      className="rounded-lg bg-ink px-4 py-2 text-[12px] font-medium text-bg hover:opacity-90"
-                    >
-                      Superadmin
-                    </Link>
+              <div
+                className={clsx(
+                  "grid gap-6",
+                  isSuperadmin ? "lg:grid-cols-12" : "lg:grid-cols-1",
+                )}
+              >
+                <section className={clsx(isSuperadmin ? "lg:col-span-7" : "")}>
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Recent activity</h2>
+                    <button type="button" className="cursor-not-allowed text-[11px] text-subtle opacity-60" disabled>
+                      View all
+                    </button>
+                  </div>
+                  <div className="rounded-lg border border-border bg-bg px-5 py-12 text-center">
+                    <p className="text-[12px] text-muted">
+                      No activity yet. Ingest and query events will appear here in a future release.
+                    </p>
                   </div>
                 </section>
-              ) : null}
+
+                {isSuperadmin ? (
+                  <div className="flex flex-col gap-4 lg:col-span-5">
+                    <section>
+                      <h2 className="mb-3 text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Administration</h2>
+                      <div className="space-y-4 rounded-lg border border-border bg-bg p-4">
+                        <div className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-[13px] font-medium text-ink">Superadmin panel</div>
+                            <p className="mt-0.5 text-[12px] text-muted">Manage catalog plans and pricing.</p>
+                          </div>
+                          <Link
+                            href="/superadmin"
+                            className="shrink-0 rounded-lg bg-ink px-4 py-2 text-center text-[12px] font-medium text-bg hover:opacity-90"
+                          >
+                            Superadmin
+                          </Link>
+                        </div>
+                        <div className="flex flex-col gap-2 border-b border-border pb-4 sm:flex-row sm:items-center sm:justify-between">
+                          <div>
+                            <div className="text-[13px] font-medium text-ink">Impersonate user</div>
+                            <p className="mt-0.5 text-[12px] text-muted">View workspace as any user.</p>
+                          </div>
+                          <button
+                            type="button"
+                            disabled
+                            className="shrink-0 cursor-not-allowed rounded-lg border border-border2 px-4 py-2 text-[12px] text-muted opacity-70"
+                          >
+                            Impersonate
+                          </button>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[12px] text-muted">Worker health · ingest &amp; gardener</span>
+                          <span className="flex items-center gap-1.5 text-[12px] font-medium text-success-text">
+                            <span className="h-2 w-2 rounded-full bg-success" aria-hidden />
+                            All OK
+                          </span>
+                        </div>
+                      </div>
+                    </section>
+
+                    <section>
+                      <h2 className="mb-3 text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">System status</h2>
+                      <div className="space-y-3 rounded-lg border border-border bg-bg p-4 text-[12px]">
+                        <div className="flex justify-between gap-4 border-b border-border pb-3">
+                          <span className="text-muted">OpenRouter balance</span>
+                          <span className="font-medium text-ink">—</span>
+                        </div>
+                        <div className="flex justify-between gap-4 border-b border-border pb-3">
+                          <span className="text-muted">Queue depth</span>
+                          <span className="font-medium text-ink">0</span>
+                        </div>
+                        <div className="flex justify-between gap-4">
+                          <span className="text-muted">Total registered users</span>
+                          <span className="font-medium text-ink">—</span>
+                        </div>
+                      </div>
+                    </section>
+                  </div>
+                ) : null}
+              </div>
             </>
           )}
         </div>

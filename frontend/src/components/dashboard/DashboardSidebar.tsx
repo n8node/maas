@@ -20,14 +20,31 @@ function initialsFromEmail(email: string): string {
   return (local[0] ?? "?").toUpperCase();
 }
 
+function BadgeSoon() {
+  return (
+    <span className="ml-auto rounded-full bg-bg2 px-2 py-0.5 text-[9px] font-medium uppercase tracking-wide text-subtle">
+      soon
+    </span>
+  );
+}
+
 type Props = {
   userEmail: string;
   planLabel: string;
+  /** Shown next to Instances until API exists. */
+  instanceCount?: number;
   /** Show link to /superadmin (superadmin users only). */
   isSuperadmin?: boolean;
+  onLogout?: () => void;
 };
 
-export function DashboardSidebar({ userEmail, planLabel, isSuperadmin }: Props) {
+export function DashboardSidebar({
+  userEmail,
+  planLabel,
+  instanceCount = 0,
+  isSuperadmin,
+  onLogout,
+}: Props) {
   const pathname = usePathname();
   const homeActive = pathname === "/";
   const billingActive = pathname === "/billing";
@@ -48,20 +65,25 @@ export function DashboardSidebar({ userEmail, planLabel, isSuperadmin }: Props) 
         >
           Overview
         </Link>
-        <span className="mt-1 flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
-          Instances <span className="ml-auto rounded-[10px] bg-accent-bg px-[6px] py-0.5 text-[10px] font-medium text-accent">—</span>
+        <span className="mt-1 flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
+          Instances
+          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-accent-bg px-1.5 text-[10px] font-semibold text-accent">
+            {instanceCount}
+          </span>
         </span>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
+        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           Agents
+          <BadgeSoon />
         </span>
         <div className="px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle">Developer</div>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
+        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           API Keys
         </span>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
+        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           Docs
+          <BadgeSoon />
         </span>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
+        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           Webhooks
         </span>
         <div className="px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle">Account</div>
@@ -83,20 +105,35 @@ export function DashboardSidebar({ userEmail, planLabel, isSuperadmin }: Props) 
             )}
           >
             Superadmin
+            <span className="ml-auto rounded bg-error-bg px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-error">
+              admin
+            </span>
           </Link>
         ) : null}
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-60">
+        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           Settings
+          <BadgeSoon />
         </span>
       </nav>
-      <div className="flex items-center gap-2 border-t border-border px-4 pb-4 pt-3">
-        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-bg text-[11px] font-medium text-accent">
-          {initialsFromEmail(userEmail)}
+      <div className="border-t border-border px-4 pb-4 pt-3">
+        <div className="flex items-center gap-2">
+          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-accent-bg text-[11px] font-medium text-accent">
+            {initialsFromEmail(userEmail)}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="truncate text-xs font-medium text-ink">{userEmail.split("@")[0]}</div>
+            <div className="truncate text-[11px] text-subtle">{planLabel}</div>
+          </div>
         </div>
-        <div className="min-w-0">
-          <div className="truncate text-xs font-medium text-ink">{userEmail.split("@")[0]}</div>
-          <div className="truncate text-[11px] text-subtle">{planLabel}</div>
-        </div>
+        {onLogout ? (
+          <button
+            type="button"
+            onClick={onLogout}
+            className="mt-3 w-full text-left text-[11px] text-subtle hover:text-ink"
+          >
+            Sign out
+          </button>
+        ) : null}
       </div>
     </aside>
   );

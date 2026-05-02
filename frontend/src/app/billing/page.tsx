@@ -34,6 +34,12 @@ export default function BillingPage() {
     }
   }, [loading, user, router]);
 
+  function logout() {
+    clearToken();
+    setUser(null);
+    router.refresh();
+  }
+
   if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-bg3">
@@ -53,5 +59,5 @@ export default function BillingPage() {
     );
   }
 
-  return <BillingDashboard user={user} />;
+  return <BillingDashboard user={user} onLogout={logout} />;
 }
