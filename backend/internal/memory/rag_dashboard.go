@@ -11,6 +11,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/n8node/maas/backend/internal/models"
 )
 
