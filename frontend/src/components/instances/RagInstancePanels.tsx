@@ -147,6 +147,15 @@ export function RagInstancePanels({
     }
   }, [token, instanceId]);
 
+  const loadTopics = useCallback(async () => {
+    if (!token) return;
+    try {
+      setTopics(await getRagTopics(token, instanceId));
+    } catch {
+      setTopics([]);
+    }
+  }, [token, instanceId]);
+
   const onDeleteSource = useCallback(
     async (sourceId: string, filename: string) => {
       if (!token) return;
@@ -172,15 +181,6 @@ export function RagInstancePanels({
     },
     [token, instanceId, loadDocuments, loadStats, loadTopics],
   );
-
-  const loadTopics = useCallback(async () => {
-    if (!token) return;
-    try {
-      setTopics(await getRagTopics(token, instanceId));
-    } catch {
-      setTopics([]);
-    }
-  }, [token, instanceId]);
 
   useEffect(() => {
     void loadStats();
