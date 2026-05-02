@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strings"
 	"unicode/utf8"
 
@@ -11,6 +12,66 @@ import (
 
 	"github.com/n8node/maas/backend/internal/models"
 )
+
+// Markers embedded in wiki query snippets for UI highlighting (must match frontend WikiHighlightedSnippet).
+const (
+	wikiSnippetHLStart = "[[MNQ-HL]]"
+	wikiSnippetHLEnd   = "[[/MNQ-HL]]"
+)
+
+func wikiTruncateRune(s string, max int) string {
+	if max <= 0 {
+		return ""
+	}
+	r := []rune(s)
+	if len(r) <= max {
+		return s
+	}
+	return string(r[:max]) + "…"
+}
+
+// wikiSnippetILIKEHighlight wraps the case-insensitive match in wikiSnippetHL markers with a rune window around it (short queries).
+func wikiSnippetILIKEHighlight(content, query string) string {
+	query = strings.TrimSpace(query)
+	if query == "" {
+		return wikiTruncateRune(content, 420)
+	}
+	re := regexp.MustCompile(`(?is)` + regexp.QuoteMeta(query))
+	loc := re.FindStringIndex(content)
+	if loc == nil {
+		return wikiTruncateRune(content, 420)
+	}
+	a, b := loc[0], loc[1]
+	rs := []rune(content)
+	si := utf8.RuneCountInString(content[:a])
+	ei := utf8.RuneCountInString(content[:b])
+	const margin = 160
+	w0 := si - margin
+	if w0 < 0 {
+		w0 = 0
+	}
+	w1 := ei + margin
+	if w1 > len(rs) {
+		w1 = len(rs)
+	}
+	var out strings.Builder
+	if w0 > 0 {
+		out.WriteString("…")
+	}
+	for i := w0; i < w1; i++ {
+		if i == si {
+			out.WriteString(wikiSnippetHLStart)
+		}
+		out.WriteRune(rs[i])
+		if i == ei-1 {
+			out.WriteString(wikiSnippetHLEnd)
+		}
+	}
+	if w1 < len(rs) {
+		out.WriteString("…")
+	}
+	return out.String()
+}
 
 // WikiConceptInput is optional structured knowledge attached to a wiki ingest.
 type WikiConceptInput struct {
@@ -171,19 +232,23 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 		scope = strings.TrimSpace(*in.UserScope)
 	}
 
+	wikiFTSSQL := fmt.Sprintf(`
+		SELECT seg.id::text, seg.content,
+		  ts_headline('simple', seg.content, plainto_tsquery('simple', $2),
+		    'StartSel=%s, StopSel=%s, MaxWords=120, MinWords=14, MaxFragments=3, ShortWord=2, HighlightAll=TRUE') AS headline,
+		  ts_rank(to_tsvector('simple', seg.content), plainto_tsquery('simple', $2))::float4 AS rank
+		FROM wiki_segments seg
+		INNER JOIN wiki_sources src ON src.id = seg.source_id
+		WHERE src.instance_id = $1
+		  AND ($3::text IS NULL OR src.user_scope IS NULL OR src.user_scope = $3::text)
+		  AND to_tsvector('simple', seg.content) @@ plainto_tsquery('simple', $2)
+		ORDER BY rank DESC NULLS LAST
+		LIMIT $4`, wikiSnippetHLStart, wikiSnippetHLEnd)
+
 	var rows pgx.Rows
 	var errQ error
 	if len(q) >= 2 {
-		rows, errQ = s.pool.Query(ctx, `
-			SELECT seg.id::text, seg.content,
-			  ts_rank(to_tsvector('simple', seg.content), plainto_tsquery('simple', $2))::float4 AS rank
-			FROM wiki_segments seg
-			INNER JOIN wiki_sources src ON src.id = seg.source_id
-			WHERE src.instance_id = $1
-			  AND ($3::text IS NULL OR src.user_scope IS NULL OR src.user_scope = $3::text)
-			  AND to_tsvector('simple', seg.content) @@ plainto_tsquery('simple', $2)
-			ORDER BY rank DESC NULLS LAST
-			LIMIT $4`, instanceID, q, scope, topK)
+		rows, errQ = s.pool.Query(ctx, wikiFTSSQL, instanceID, q, scope, topK)
 	} else {
 		rows, errQ = s.pool.Query(ctx, `
 			SELECT seg.id::text, seg.content, 1.0::float4 AS rank
@@ -199,18 +264,29 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 	}
 	defer rows.Close()
 	cites := make([]Citation, 0)
-	for rows.Next() {
-		var id, content string
-		var rank float32
-		if err := rows.Scan(&id, &content, &rank); err != nil {
-			return nil, err
+	if len(q) >= 2 {
+		for rows.Next() {
+			var id, content, headline string
+			var rank float32
+			if err := rows.Scan(&id, &content, &headline, &rank); err != nil {
+				return nil, err
+			}
+			snippet := strings.TrimSpace(headline)
+			if snippet == "" {
+				snippet = wikiTruncateRune(content, 450)
+			}
+			cites = append(cites, Citation{ChunkID: id, Snippet: snippet, Score: rank})
 		}
-		snippet := content
-		runes := []rune(snippet)
-		if len(runes) > 400 {
-			snippet = string(runes[:400]) + "…"
+	} else {
+		for rows.Next() {
+			var id, content string
+			var rank float32
+			if err := rows.Scan(&id, &content, &rank); err != nil {
+				return nil, err
+			}
+			snippet := wikiSnippetILIKEHighlight(content, q)
+			cites = append(cites, Citation{ChunkID: id, Snippet: snippet, Score: rank})
 		}
-		cites = append(cites, Citation{ChunkID: id, Snippet: snippet, Score: rank})
 	}
 	msg := "No matching wiki segments found."
 	if len(cites) > 0 {

@@ -26,6 +26,7 @@ import {
 } from "@/lib/api";
 import { getToken } from "@/lib/token";
 import { formatTokens } from "@/lib/format";
+import { WikiHighlightedSnippet } from "@/components/instances/WikiHighlightedSnippet";
 
 type WikiTab = "playground" | "concepts" | "actionlog" | "gardener" | "settings";
 
@@ -708,7 +709,9 @@ export function WikiInstancePanels({
                                 <span className="font-mono text-[10px] text-subtle">
                                   {(c.chunk_id ?? "").slice(0, 10)}…
                                 </span>
-                                <p className="mt-1 text-[12px] text-ink">{c.snippet ?? ""}</p>
+                                <p className="mt-1 text-[12px] leading-relaxed text-ink">
+                                  <WikiHighlightedSnippet text={c.snippet ?? ""} />
+                                </p>
                               </div>
                               <span className="shrink-0 text-[11px] text-muted">
                                 {(typeof c.score === "number" ? c.score : 0).toFixed(2)}
