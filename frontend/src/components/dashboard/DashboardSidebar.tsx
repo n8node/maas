@@ -128,7 +128,7 @@ export function DashboardSidebar({
             {initialsFromEmail(userEmail)}
           </div>
           <div className="min-w-0 flex-1">
-            <div className="truncate text-xs font-medium text-ink">{userEmail.split("@")[0]}</div>
+            <div className="truncate text-xs font-medium text-ink">{(userEmail || "").split("@")[0] || "—"}</div>
             <div className="truncate text-[11px] text-subtle">{planLabel}</div>
           </div>
         </div>

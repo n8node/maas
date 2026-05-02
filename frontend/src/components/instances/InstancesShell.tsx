@@ -40,7 +40,7 @@ export function InstancesShell({ user, onLogout, title, headerRight, omitHeader,
   return (
     <div className="min-h-screen bg-bg3 pl-[220px]">
       <DashboardSidebar
-        userEmail={user.email}
+        userEmail={user.email ?? ""}
         planLabel={planLabel}
         instanceCount={instanceCount}
         isSuperadmin={user.role === "superadmin"}

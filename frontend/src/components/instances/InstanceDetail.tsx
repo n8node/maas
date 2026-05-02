@@ -74,18 +74,13 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
     );
   }
 
-  const isRag = inst.memory_type === "rag";
-  const isWiki = inst.memory_type === "wiki";
-  const isEpisodic = inst.memory_type === "episodic";
+  const mt = inst.memory_type;
+  const isRag = mt === "rag";
+  const isWiki = mt === "wiki";
+  const isEpisodic = mt === "episodic";
+  const isWorking = mt === "working";
   const typeBadge =
-    inst.memory_type === "rag"
-      ? "RAG"
-      : inst.memory_type === "wiki"
-        ? "Wiki"
-        : inst.memory_type === "episodic"
-          ? "Episodic"
-          : inst.memory_type.toUpperCase();
-  const isWorking = inst.memory_type === "working";
+    mt === "rag" ? "RAG" : mt === "wiki" ? "Wiki" : mt === "episodic" ? "Episodic" : mt === "working" ? "Working" : mt ? mt.toUpperCase() : "Unknown";
   const fullBleed = isWiki || isRag || isEpisodic || isWorking;
 
   return (

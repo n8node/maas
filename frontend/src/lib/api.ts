@@ -286,11 +286,28 @@ export async function getInstance(token: string, id: string): Promise<MemoryInst
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}`, {
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: { instance: MemoryInstanceDTO } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data: { instance?: MemoryInstanceDTO } } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Could not load instance");
   }
-  return data.data.instance;
+  const raw = data.data?.instance;
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid instance response");
+  }
+  const cfg = raw.config;
+  const config: Record<string, unknown> =
+    cfg != null && typeof cfg === "object" && !Array.isArray(cfg) ? (cfg as Record<string, unknown>) : {};
+  return {
+    id: String(raw.id ?? ""),
+    name: String(raw.name ?? "Untitled"),
+    memory_type: String(raw.memory_type ?? "")
+      .toLowerCase()
+      .trim(),
+    status: String(raw.status ?? "active"),
+    config,
+    created_at: String(raw.created_at ?? new Date().toISOString()),
+    updated_at: String(raw.updated_at ?? new Date().toISOString()),
+  };
 }
 
 export type RAGStatsDTO = {
