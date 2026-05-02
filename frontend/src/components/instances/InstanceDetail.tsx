@@ -6,6 +6,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
 import { EpisodicInstancePanels } from "@/components/instances/EpisodicInstancePanels";
+import { GraphInstancePanels } from "@/components/instances/GraphInstancePanels";
 import { RagInstancePanels } from "@/components/instances/RagInstancePanels";
 import { WikiInstancePanels } from "@/components/instances/WikiInstancePanels";
 import { WorkingInstancePanels } from "@/components/instances/WorkingInstancePanels";
@@ -79,9 +80,22 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
   const isWiki = mt === "wiki";
   const isEpisodic = mt === "episodic";
   const isWorking = mt === "working";
+  const isGraph = mt === "graph";
   const typeBadge =
-    mt === "rag" ? "RAG" : mt === "wiki" ? "Wiki" : mt === "episodic" ? "Episodic" : mt === "working" ? "Working" : mt ? mt.toUpperCase() : "Unknown";
-  const fullBleed = isWiki || isRag || isEpisodic || isWorking;
+    mt === "rag"
+      ? "RAG"
+      : mt === "wiki"
+        ? "Wiki"
+        : mt === "episodic"
+          ? "Episodic"
+          : mt === "working"
+            ? "Working"
+            : mt === "graph"
+              ? "Graph"
+              : mt
+                ? mt.toUpperCase()
+                : "Unknown";
+  const fullBleed = isWiki || isRag || isEpisodic || isWorking || isGraph;
 
   return (
     <InstancesShell
@@ -128,6 +142,13 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         />
       ) : isWorking ? (
         <WorkingInstancePanels
+          instanceId={instanceId}
+          inst={inst}
+          onRefreshInstance={load}
+          onDeleteInstance={onDelete}
+        />
+      ) : isGraph ? (
+        <GraphInstancePanels
           instanceId={instanceId}
           inst={inst}
           onRefreshInstance={load}

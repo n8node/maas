@@ -34,7 +34,7 @@ const MEMORY_PILLS = [
   { id: "wiki", label: "Wiki", href: "/instances/new?type=wiki", col: "#534ab7", bg: "#eeedfe", soon: false },
   { id: "episodic", label: "Episodic", href: "/instances/new?type=episodic", col: "#3b6d11", bg: "#eaf3de", soon: false },
   { id: "working", label: "Working", href: "/instances/new?type=working", col: "#854f0b", bg: "#faeeda", soon: false },
-  { id: "graph", label: "Graph", href: "#", col: "#993c1d", bg: "#faece7", soon: true },
+  { id: "graph", label: "Graph", href: "/instances/new?type=graph", col: "#993c1d", bg: "#faece7", soon: false },
   { id: "reflective", label: "Reflective", href: "#", col: "#993556", bg: "#fbeaf0", soon: true },
   { id: "agent", label: "Agent (unified)", href: "#", col: "#1a1a1a", bg: "#f3f2ef", soon: true },
 ] as const;

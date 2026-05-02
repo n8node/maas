@@ -181,6 +181,8 @@ func (s *Service) Create(ctx context.Context, userID uuid.UUID, in CreateInput) 
 		allowed, err = s.planAllowsMemoryType(ctx, userID, "episodic")
 	case "working":
 		allowed, err = s.planAllowsMemoryType(ctx, userID, "working")
+	case "graph":
+		allowed, err = s.planAllowsMemoryType(ctx, userID, "graph")
 	default:
 		return uuid.Nil, ErrInvalidType
 	}
