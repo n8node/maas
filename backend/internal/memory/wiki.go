@@ -181,7 +181,7 @@ func (s *Service) ingestWiki(ctx context.Context, userID uuid.UUID, inst *models
 			}
 		}
 	} else if wikiConfigAutoExtract(inst.Config) && s.chat == nil {
-		extractNote = "Concept extraction skipped: chat model unavailable (set OPENROUTER_API_KEY on the server)."
+		extractNote = "Concept extraction skipped: chat model unavailable (configure LLM API access on the server)."
 	}
 
 	if err := s.bill.ConsumeTokens(ctx, userID, totalTok+llmTok); err != nil {

@@ -384,7 +384,7 @@ export function WikiInstancePanels({
       let summary = parts.join(" ");
       if (result.proposals_added === 0) {
         summary +=
-          " That is normal if there are no duplicate titles among active concepts, the model found nothing to flag, or only the heuristic ran (no OpenRouter key on the server). Expand “How Gardener triage works” below.";
+          " That is normal if there are no duplicate titles among active concepts, the model found nothing to flag, or only the heuristic ran (no LLM API configured on the server). Expand “How Gardener triage works” below.";
       }
       setTriageNotice(summary);
     } catch (e) {
@@ -977,8 +977,9 @@ export function WikiInstancePanels({
                     merging them.
                   </li>
                   <li>
-                    <span className="font-medium">LLM pass</span> — if the server has an OpenRouter API key, a model may
-                    suggest merges or state changes (e.g. stale / weak). If there is no key, only the heuristic pass runs.
+                    <span className="font-medium">LLM pass</span> — if the server has a language model API configured, a
+                    model may suggest merges or state changes (e.g. stale / weak). If not configured, only the heuristic
+                    pass runs.
                   </li>
                 </ul>
                 <p className="font-medium text-[#185fa5]">Why you might get zero new proposals</p>

@@ -360,7 +360,7 @@ func (h *Instances) IngestFile(w http.ResponseWriter, r *http.Request) {
 		UserScope: userScope,
 	})
 	if errors.Is(err, memory.ErrEmbeddingsDisabled) {
-		WriteError(w, http.StatusServiceUnavailable, "EMBEDDINGS_DISABLED", "set OPENROUTER_API_KEY to ingest files with vectors")
+		WriteError(w, http.StatusServiceUnavailable, "EMBEDDINGS_DISABLED", "configure embeddings and LLM API access on the server to ingest files with vectors")
 		return
 	}
 	if errors.Is(err, billing.ErrTokensExhausted) {

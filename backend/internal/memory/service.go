@@ -24,7 +24,7 @@ var (
 	ErrInvalidType         = errors.New("memory type not allowed on your plan")
 	ErrEmptyContent        = errors.New("content must not be empty")
 	ErrEmptyQuery          = errors.New("query must not be empty")
-	ErrEmbeddingsDisabled  = errors.New("file ingestion requires OPENROUTER_API_KEY and embeddings")
+	ErrEmbeddingsDisabled  = errors.New("file ingestion requires embeddings and LLM API configuration on the server")
 	ErrGardenerNotAllowed  = errors.New("gardener is not enabled on your plan")
 )
 

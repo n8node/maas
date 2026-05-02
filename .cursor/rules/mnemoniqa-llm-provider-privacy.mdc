@@ -1,0 +1,28 @@
+---
+description: User-facing copy must not name the upstream LLM vendor; use neutral "LLM / API on server" wording
+globs: ["**/frontend/**", "**/backend/internal/handler/**", "**/backend/internal/memory/**"]
+alwaysApply: true
+---
+
+# Mnemoniqa — LLM provider abstraction (user-facing)
+
+## Principle
+
+End users and tenant developers using the dashboard or public API **must not** be told which third-party LLM gateway or vendor powers Mnemoniqa (e.g. OpenRouter, Anthropic, OpenAI by name as “the” backend).
+
+Operators configure credentials via environment variables; that is **implementation detail**, not product UX.
+
+## Allowed wording (UI, API error messages to clients, in-app help)
+
+- **Neutral:** “language model”, “LLM”, “model”, “embeddings”, “API configured on the server”, “LLM API access”, “chat model unavailable”.
+- **Configuration hints:** “Configure LLM API access on the server” — **not** “Set `OPENROUTER_API_KEY`” in user-visible strings.
+
+## Where naming vendors is still OK
+
+- **Internal code** (package names, env vars, comments for engineers).
+- **`.env.example`**, docker-compose, deployment docs, runbooks for **operators**.
+- **Cursor rules** and **developer documentation** aimed at repo contributors.
+
+## Critical rule
+
+**Dashboard, marketing pages for developers, and JSON `error.message` values returned to API clients** must stay vendor-agnostic unless the user explicitly integrates with that vendor outside Mnemoniqa.

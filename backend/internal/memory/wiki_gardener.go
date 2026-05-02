@@ -365,7 +365,7 @@ func wikiGardenerAllowedTargetState(s string) bool {
 	}
 }
 
-// RunWikiGardenerTriage runs heuristic duplicate detection and optional LLM Phase 0 proposals (requires OPENROUTER_API_KEY / chat client).
+// RunWikiGardenerTriage runs heuristic duplicate detection and optional LLM Phase 0 proposals (requires chat client / LLM API configured on server).
 func (s *Service) RunWikiGardenerTriage(ctx context.Context, userID, instanceID uuid.UUID) (*WikiTriageResult, error) {
 	_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
 	if _, err := s.requireWikiInstance(ctx, userID, instanceID); err != nil {
