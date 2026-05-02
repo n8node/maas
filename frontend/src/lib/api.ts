@@ -353,3 +353,101 @@ export async function queryInstance(
   }
   return data.data;
 }
+
+export type RAGSourceDTO = {
+  id: string;
+  instance_id: string;
+  filename: string;
+  byte_size: number;
+  mime_type: string;
+  embedding_model: string;
+  tokens_total: number;
+  chunk_count: number;
+  created_at: string;
+};
+
+export async function listSources(token: string, instanceId: string): Promise<RAGSourceDTO[]> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/sources`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { sources: RAGSourceDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not list files");
+  }
+  return data.data.sources;
+}
+
+export type FileIngestResultDTO = {
+  source_id: string;
+  chunks_added: number;
+  tokens_consumed: number;
+  embedding_model: string;
+};
+
+export async function ingestInstanceFile(
+  token: string,
+  instanceId: string,
+  file: File,
+  userId?: string,
+): Promise<FileIngestResultDTO> {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (userId) {
+    fd.append("user_id", userId);
+  }
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/ingest-file`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: fd,
+  });
+  const data = (await parseJson(res)) as { data: FileIngestResultDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "File ingest failed");
+  }
+  return data.data;
+}
+
+export type SourceChunkDTO = {
+  id: string;
+  content: string;
+  token_estimate: number;
+  created_at: string;
+  ordinal: number;
+  embedding: number[] | null;
+};
+
+export async function listSourceChunks(
+  token: string,
+  instanceId: string,
+  sourceId: string,
+  limit = 20,
+  offset = 0,
+): Promise<{ chunks: SourceChunkDTO[]; total: number }> {
+  const path = `${API_BASE}/instances/${encodeURIComponent(instanceId)}/sources/${encodeURIComponent(sourceId)}/chunks?limit=${limit}&offset=${offset}`;
+  const res = await fetch(path, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { chunks: SourceChunkDTO[]; total: number } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load chunks");
+  }
+  return { chunks: data.data.chunks, total: data.data.total };
+}
+
+export async function deleteInstanceChunk(
+  token: string,
+  instanceId: string,
+  chunkId: string,
+): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/instances/${encodeURIComponent(instanceId)}/chunks/${encodeURIComponent(chunkId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not delete chunk");
+  }
+}

@@ -22,6 +22,10 @@ type Config struct {
 
 	JWTSecret  string `env:"JWT_SECRET" envDefault:""`
 	APIKeySalt string `env:"API_KEY_SALT" envDefault:""`
+
+	OpenRouterAPIKey          string `env:"OPENROUTER_API_KEY" envDefault:""`
+	OpenRouterBaseURL         string `env:"OPENROUTER_BASE_URL" envDefault:"https://openrouter.ai/api/v1"`
+	OpenRouterEmbeddingModel  string `env:"OPENROUTER_EMBEDDING_MODEL" envDefault:"openai/text-embedding-3-small"`
 }
 
 func Load() (*Config, error) {

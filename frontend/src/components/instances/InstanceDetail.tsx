@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
+import { InstanceFilesPanel } from "@/components/instances/InstanceFilesPanel";
 import {
   deleteInstance,
   getInstance,
@@ -16,8 +17,11 @@ import {
 } from "@/lib/api";
 import { getToken } from "@/lib/token";
 import { formatTokens } from "@/lib/format";
+import clsx from "clsx";
 
 type Props = { user: MeUser; onLogout?: () => void; instanceId: string };
+
+type TabId = "playground" | "files";
 
 export function InstanceDetail({ user, onLogout, instanceId }: Props) {
   const router = useRouter();
@@ -35,6 +39,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
   const [queryBusy, setQueryBusy] = useState(false);
   const [queryMsg, setQueryMsg] = useState<string | null>(null);
   const [queryBody, setQueryBody] = useState<QueryResultDTO | null>(null);
+  const [tab, setTab] = useState<TabId>("playground");
 
   const load = useCallback(async () => {
     if (!token || !instanceId) return;
@@ -150,11 +155,39 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         </div>
       }
     >
+      <div className="border-b border-border bg-bg px-7">
+        <nav className="flex gap-1 pt-1">
+          {(
+            [
+              ["playground", "Playground"],
+              ["files", "Files & vectors"],
+            ] as const
+          ).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              onClick={() => setTab(id)}
+              className={clsx(
+                "-mb-px border-b-2 px-3 py-3 text-[13px] transition-colors",
+                tab === id ? "border-ink font-medium text-ink" : "border-transparent text-muted hover:text-ink",
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </nav>
+      </div>
+
+      {tab === "files" ? (
+        <InstanceFilesPanel instanceId={instanceId} instanceName={inst.name} />
+      ) : null}
+
+      {tab === "playground" ? (
       <div className="grid flex-1 gap-6 p-7 lg:grid-cols-2 lg:gap-8">
         <section className="rounded-lg border border-border bg-bg p-5">
           <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Ingest</h2>
           <p className="mt-1 text-[12px] text-muted">
-            Paste or type text. It is split into chunks and indexed for search. Tokens are charged by estimated size.
+            Paste or type text. Chunks are indexed for search (no embeddings). Use Files & vectors for uploads with OpenRouter embeddings.
           </p>
           <form onSubmit={onIngest} className="mt-4 space-y-3">
             <div>
@@ -199,7 +232,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
         <section className="rounded-lg border border-border bg-bg p-5">
           <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Query</h2>
           <p className="mt-1 text-[12px] text-muted">
-            Full-text search over chunks. Response includes citations; LLM answer synthesis is not wired yet.
+            Uses vector similarity when file embeddings exist; otherwise full-text search. Citations only — no LLM synthesis yet.
           </p>
           <form onSubmit={onQuery} className="mt-4 space-y-3">
             <div>
@@ -251,6 +284,7 @@ export function InstanceDetail({ user, onLogout, instanceId }: Props) {
           </form>
         </section>
       </div>
+      ) : null}
     </InstancesShell>
   );
 }

@@ -3,6 +3,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
@@ -13,6 +14,7 @@ import (
 	"github.com/n8node/maas/backend/internal/handler"
 	appmw "github.com/n8node/maas/backend/internal/middleware"
 	"github.com/n8node/maas/backend/internal/memory"
+	"github.com/n8node/maas/backend/internal/openrouter"
 	"github.com/n8node/maas/backend/internal/repository"
 )
 
@@ -47,7 +49,11 @@ func New(opts Options) http.Handler {
 	keysH := handler.NewAPIKeys(opts.Config, keyRepo)
 	billH := handler.NewBilling(bill)
 	billAdm := handler.NewBillingAdmin(bill)
-	memSvc := memory.NewService(opts.Pool, bill)
+	var memOpts []memory.ServiceOption
+	if strings.TrimSpace(opts.Config.OpenRouterAPIKey) != "" {
+		memOpts = append(memOpts, memory.WithEmbedder(openrouter.NewEmbeddingClient(opts.Config)))
+	}
+	memSvc := memory.NewService(opts.Pool, bill, memOpts...)
 	instH := handler.NewInstances(memSvc)
 	authDeps := appmw.AuthDeps{Cfg: opts.Config, Users: userRepo, Keys: keyRepo}
 	authRoute := appmw.Authenticate(authDeps)
@@ -75,6 +81,10 @@ func New(opts Options) http.Handler {
 		r.With(authRoute).Route("/instances", func(r chi.Router) {
 			r.Get("/", instH.List)
 			r.Post("/", instH.Create)
+			r.Post("/{id}/ingest-file", instH.IngestFile)
+			r.Get("/{id}/sources/{sourceId}/chunks", instH.ListSourceChunks)
+			r.Get("/{id}/sources", instH.ListSources)
+			r.Delete("/{id}/chunks/{chunkId}", instH.DeleteChunk)
 			r.Get("/{id}", instH.Get)
 			r.Patch("/{id}", instH.Patch)
 			r.Delete("/{id}", instH.Delete)

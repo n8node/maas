@@ -66,6 +66,9 @@ services:
       VERSION: ${VERSION:-0.3.0}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set (min 16 chars)}
       API_KEY_SALT: ${API_KEY_SALT:?API_KEY_SALT must be set}
+      OPENROUTER_API_KEY: ${OPENROUTER_API_KEY:-}
+      OPENROUTER_BASE_URL: ${OPENROUTER_BASE_URL:-https://openrouter.ai/api/v1}
+      OPENROUTER_EMBEDDING_MODEL: ${OPENROUTER_EMBEDDING_MODEL:-openai/text-embedding-3-small}
 
   frontend:
     build:

@@ -15,25 +15,32 @@ import (
 
 	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/models"
+	"github.com/n8node/maas/backend/internal/openrouter"
 )
 
 var (
-	ErrNotFound     = errors.New("instance not found")
-	ErrLimitReached = errors.New("instance limit reached for your plan")
-	ErrInvalidType  = errors.New("memory type not allowed on your plan")
-	ErrEmptyContent = errors.New("content must not be empty")
-	ErrEmptyQuery   = errors.New("query must not be empty")
+	ErrNotFound            = errors.New("instance not found")
+	ErrLimitReached        = errors.New("instance limit reached for your plan")
+	ErrInvalidType         = errors.New("memory type not allowed on your plan")
+	ErrEmptyContent        = errors.New("content must not be empty")
+	ErrEmptyQuery          = errors.New("query must not be empty")
+	ErrEmbeddingsDisabled  = errors.New("file ingestion requires OPENROUTER_API_KEY and embeddings")
 )
 
 const maxChunkRunes = 8000
 
 type Service struct {
-	pool *pgxpool.Pool
-	bill *billing.Service
+	pool  *pgxpool.Pool
+	bill  *billing.Service
+	embed *openrouter.EmbeddingClient
 }
 
-func NewService(pool *pgxpool.Pool, bill *billing.Service) *Service {
-	return &Service{pool: pool, bill: bill}
+func NewService(pool *pgxpool.Pool, bill *billing.Service, opts ...ServiceOption) *Service {
+	s := &Service{pool: pool, bill: bill}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
 }
 
 func estimateTokens(s string) int64 {
@@ -376,48 +383,112 @@ func (s *Service) Query(ctx context.Context, userID, instanceID uuid.UUID, in Qu
 		return nil, err
 	}
 
+	useVec := s.embed != nil
+	if useVec {
+		has, err := s.instanceHasVectorChunks(ctx, instanceID)
+		if err != nil {
+			return nil, err
+		}
+		useVec = has
+	}
+
 	var rows pgx.Rows
 	var errQ error
-	if len(q) >= 2 {
-		rows, errQ = s.pool.Query(ctx, `
-			SELECT id::text, content,
-			  ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', $3))::float4 AS rank
-			FROM rag_chunks
-			WHERE instance_id = $1
-			  AND ($2::text IS NULL OR user_scope IS NULL OR user_scope = $2)
-			  AND to_tsvector('simple', content) @@ plainto_tsquery('simple', $3)
-			ORDER BY rank DESC NULLS LAST
-			LIMIT $4`, instanceID, in.UserScope, q, topK)
-	} else {
-		rows, errQ = s.pool.Query(ctx, `
-			SELECT id::text, content, 1.0::float4 AS rank
-			FROM rag_chunks
-			WHERE instance_id = $1
-			  AND ($2::text IS NULL OR user_scope IS NULL OR user_scope = $2)
-			  AND content ILIKE '%' || $3 || '%'
-			LIMIT $4`, instanceID, in.UserScope, q, topK)
+
+	if useVec {
+		qemb, err := s.embed.EmbedOne(ctx, q)
+		if err != nil {
+			useVec = false
+		} else {
+			vecStr := vectorLiteral(qemb)
+			rows, errQ = s.pool.Query(ctx, `
+				SELECT id::text, content,
+				  (embedding <=> $3::vector)::float8 AS dist
+				FROM rag_chunks
+				WHERE instance_id = $1
+				  AND embedding IS NOT NULL
+				  AND ($2::text IS NULL OR user_scope IS NULL OR user_scope = $2)
+				ORDER BY embedding <=> $3::vector
+				LIMIT $4`, instanceID, in.UserScope, vecStr, topK)
+			if errQ != nil {
+				useVec = false
+			}
+		}
 	}
+
+	if !useVec {
+		if rows != nil {
+			rows.Close()
+		}
+		if len(q) >= 2 {
+			rows, errQ = s.pool.Query(ctx, `
+				SELECT id::text, content,
+				  ts_rank(to_tsvector('simple', content), plainto_tsquery('simple', $3))::float4 AS rank
+				FROM rag_chunks
+				WHERE instance_id = $1
+				  AND ($2::text IS NULL OR user_scope IS NULL OR user_scope = $2)
+				  AND to_tsvector('simple', content) @@ plainto_tsquery('simple', $3)
+				ORDER BY rank DESC NULLS LAST
+				LIMIT $4`, instanceID, in.UserScope, q, topK)
+		} else {
+			rows, errQ = s.pool.Query(ctx, `
+				SELECT id::text, content, 1.0::float4 AS rank
+				FROM rag_chunks
+				WHERE instance_id = $1
+				  AND ($2::text IS NULL OR user_scope IS NULL OR user_scope = $2)
+				  AND content ILIKE '%' || $3 || '%'
+				LIMIT $4`, instanceID, in.UserScope, q, topK)
+		}
+	}
+
 	if errQ != nil {
 		return nil, errQ
 	}
 	defer rows.Close()
 	var cites []Citation
-	for rows.Next() {
-		var id, content string
-		var rank float32
-		if err := rows.Scan(&id, &content, &rank); err != nil {
-			return nil, err
+	if useVec {
+		for rows.Next() {
+			var id, content string
+			var dist float64
+			if err := rows.Scan(&id, &content, &dist); err != nil {
+				return nil, err
+			}
+			snippet := content
+			runes := []rune(snippet)
+			if len(runes) > 400 {
+				snippet = string(runes[:400]) + "…"
+			}
+			score := float32(1.0 - dist)
+			if score < 0 {
+				score = 0
+			}
+			if score > 1 {
+				score = 1
+			}
+			cites = append(cites, Citation{ChunkID: id, Snippet: snippet, Score: score})
 		}
-		snippet := content
-		runes := []rune(snippet)
-		if len(runes) > 400 {
-			snippet = string(runes[:400]) + "…"
+	} else {
+		for rows.Next() {
+			var id, content string
+			var rank float32
+			if err := rows.Scan(&id, &content, &rank); err != nil {
+				return nil, err
+			}
+			snippet := content
+			runes := []rune(snippet)
+			if len(runes) > 400 {
+				snippet = string(runes[:400]) + "…"
+			}
+			cites = append(cites, Citation{ChunkID: id, Snippet: snippet, Score: rank})
 		}
-		cites = append(cites, Citation{ChunkID: id, Snippet: snippet, Score: rank})
 	}
 	msg := "No matching passages found in this instance."
 	if len(cites) > 0 {
-		msg = fmt.Sprintf("Found %d matching passage(s). Synthesis via LLM is not wired yet — see citations.", len(cites))
+		if useVec {
+			msg = fmt.Sprintf("Found %d passage(s) by vector similarity. Synthesis via LLM is not wired yet — see citations.", len(cites))
+		} else {
+			msg = fmt.Sprintf("Found %d matching passage(s). Synthesis via LLM is not wired yet — see citations.", len(cites))
+		}
 	}
 	return &QueryResult{
 		Message:    msg,
