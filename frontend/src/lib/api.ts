@@ -383,13 +383,14 @@ export type QueryResultDTO = {
   message: string;
   citations: Array<{ chunk_id: string; snippet: string; score: number }>;
   tokens_used: number;
+  synthesized?: boolean;
   wiki_related_concepts?: Array<{ id: string; title: string; state: string }>;
 };
 
 export async function queryInstance(
   token: string,
   id: string,
-  body: { query: string; top_k?: number; user_id?: string },
+  body: { query: string; top_k?: number; user_id?: string; synthesize?: boolean },
 ): Promise<QueryResultDTO> {
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(id)}/query`, {
     method: "POST",
@@ -423,10 +424,13 @@ export async function queryInstance(
       .filter((x): x is NonNullable<typeof x> => x != null);
     if (wiki_related_concepts.length === 0) wiki_related_concepts = undefined;
   }
+  const synRaw = (d as { synthesized?: unknown }).synthesized;
+  const synthesized = synRaw === true;
   return {
     message: typeof d.message === "string" ? d.message : "",
     citations: Array.isArray(d.citations) ? d.citations : [],
     tokens_used: typeof d.tokens_used === "number" && !Number.isNaN(d.tokens_used) ? d.tokens_used : 0,
+    synthesized,
     wiki_related_concepts,
   };
 }

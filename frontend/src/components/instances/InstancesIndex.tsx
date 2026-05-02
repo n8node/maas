@@ -54,8 +54,9 @@ export function InstancesIndex({ user, onLogout }: { user: MeUser; onLogout?: ()
     >
       <div className="max-w-5xl p-7 text-[13px]">
         <p className="mb-6 text-sm text-muted">
-          RAG instances store chunked text for retrieval-augmented workflows. Ingest content, then query with full-text search —
-          citations appear without LLM synthesis (coming later).
+          RAG instances store chunked text for retrieval-augmented workflows. Ingest content, run a query — matching passages are
+          retrieved first; optional LLM synthesis turns them into a concise cited answer when enabled on the query (requires OpenRouter on
+          the server).
         </p>
 
         {err ? (

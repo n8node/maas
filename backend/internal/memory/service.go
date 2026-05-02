@@ -386,13 +386,15 @@ type QueryResult struct {
 	Message             string               `json:"message"`
 	Citations           []Citation           `json:"citations"`
 	TokensUsed          int64                `json:"tokens_used"`
+	Synthesized         bool                 `json:"synthesized,omitempty"`
 	WikiRelatedConcepts []WikiRelatedConcept `json:"wiki_related_concepts,omitempty"`
 }
 
 type QueryInput struct {
-	Query     string
-	TopK      int
-	UserScope *string
+	Query      string
+	TopK       int
+	UserScope  *string
+	Synthesize *bool // nil or true: synthesize when chat is configured; false: citations only
 }
 
 func (s *Service) Query(ctx context.Context, userID, instanceID uuid.UUID, in QueryInput) (*QueryResult, error) {
@@ -531,17 +533,41 @@ func (s *Service) queryRAG(ctx context.Context, userID, instanceID uuid.UUID, in
 		}
 	}
 	msg := "No matching passages found in this instance."
+	synthesized := false
+	totalTok := tokCost
+
 	if len(cites) > 0 {
+		wantSynth := in.Synthesize == nil || (in.Synthesize != nil && *in.Synthesize)
+		retrievalHint := "full-text / keyword search"
 		if useVec {
-			msg = fmt.Sprintf("Found %d passage(s) by vector similarity. Synthesis via LLM is not wired yet — see citations.", len(cites))
+			retrievalHint = "vector similarity"
+		}
+		if wantSynth && s.chat != nil {
+			ans, synthTok, err := s.ragSynthesizeAnswer(ctx, userID, q, cites)
+			switch {
+			case err == nil && ans != "":
+				msg = ans
+				synthesized = true
+				totalTok = tokCost + synthTok
+			case err == nil && ans == "":
+				msg = fmt.Sprintf("Found %d passage(s) via %s. The model returned an empty answer; see citations below.", len(cites), retrievalHint)
+			case errors.Is(err, billing.ErrTokensExhausted):
+				msg = fmt.Sprintf("Found %d passage(s) via %s. Insufficient tokens to generate a synthesized answer; see citations below.", len(cites), retrievalHint)
+			default:
+				msg = fmt.Sprintf("Found %d passage(s) via %s. Answer synthesis failed; see citations below.", len(cites), retrievalHint)
+			}
+		} else if wantSynth && s.chat == nil {
+			msg = fmt.Sprintf("Found %d passage(s) via %s. LLM synthesis requires OPENROUTER_API_KEY on the server; see citations below.", len(cites), retrievalHint)
 		} else {
-			msg = fmt.Sprintf("Found %d matching passage(s). Synthesis via LLM is not wired yet — see citations.", len(cites))
+			msg = fmt.Sprintf("Found %d passage(s) via %s. Synthesis disabled for this request; see citations below.", len(cites), retrievalHint)
 		}
 	}
+
 	return &QueryResult{
-		Message:    msg,
-		Citations:  cites,
-		TokensUsed: tokCost,
+		Message:     msg,
+		Citations:   cites,
+		TokensUsed:  totalTok,
+		Synthesized: synthesized,
 	}, rows.Err()
 }
 

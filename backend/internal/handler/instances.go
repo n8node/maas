@@ -255,9 +255,10 @@ func (h *Instances) Ingest(w http.ResponseWriter, r *http.Request) {
 }
 
 type queryBody struct {
-	Query    string  `json:"query"`
-	TopK     int     `json:"top_k"`
-	UserID   *string `json:"user_id"`
+	Query      string  `json:"query"`
+	TopK       int     `json:"top_k"`
+	UserID     *string `json:"user_id"`
+	Synthesize *bool   `json:"synthesize"` // omit or true = LLM answer when configured; false = citations only
 }
 
 func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
@@ -281,7 +282,10 @@ func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := h.svc.Query(r.Context(), p.UserID, id, memory.QueryInput{
-		Query: body.Query, TopK: body.TopK, UserScope: body.UserID,
+		Query:      body.Query,
+		TopK:       body.TopK,
+		UserScope:  body.UserID,
+		Synthesize: body.Synthesize,
 	})
 	if errors.Is(err, billing.ErrTokensExhausted) {
 		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
@@ -304,9 +308,10 @@ func (h *Instances) Query(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := map[string]any{
-		"message":     res.Message,
-		"citations":   res.Citations,
-		"tokens_used": res.TokensUsed,
+		"message":      res.Message,
+		"citations":    res.Citations,
+		"tokens_used":  res.TokensUsed,
+		"synthesized":  res.Synthesized,
 	}
 	if len(res.WikiRelatedConcepts) > 0 {
 		data["wiki_related_concepts"] = res.WikiRelatedConcepts

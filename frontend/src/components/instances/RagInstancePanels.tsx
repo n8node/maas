@@ -100,6 +100,7 @@ export function RagInstancePanels({
 
   const [queryText, setQueryText] = useState("");
   const [topK, setTopK] = useState(5);
+  const [synthesizeAnswer, setSynthesizeAnswer] = useState(true);
   const [queryBusy, setQueryBusy] = useState(false);
   const [queryBody, setQueryBody] = useState<QueryResultDTO | null>(null);
   const [queryMsg, setQueryMsg] = useState<string | null>(null);
@@ -226,12 +227,14 @@ export function RagInstancePanels({
         query: queryText,
         top_k: topK,
         user_id: userScope.trim() || undefined,
+        synthesize: synthesizeAnswer,
       });
       setQueryBody({
         message: r.message,
         tokens_used: r.tokens_used,
         citations: r.citations,
         wiki_related_concepts: r.wiki_related_concepts,
+        synthesized: r.synthesized,
       });
       if (r.citations.length > 0) {
         const sum = r.citations.reduce((a, c) => a + (typeof c.score === "number" ? c.score : 0), 0);
@@ -491,6 +494,15 @@ export function RagInstancePanels({
                   placeholder="Ask about your indexed content…"
                   required
                 />
+                <label className="flex cursor-pointer items-center gap-2 text-[12px] text-ink">
+                  <input
+                    type="checkbox"
+                    className="rounded border-border2"
+                    checked={synthesizeAnswer}
+                    onChange={(e) => setSynthesizeAnswer(e.target.checked)}
+                  />
+                  Synthesize answer (LLM)
+                </label>
                 <div className="flex flex-wrap gap-2">
                   <select
                     value={topK}
@@ -514,6 +526,14 @@ export function RagInstancePanels({
                 {queryMsg ? <p className="text-[12px] text-error">{queryMsg}</p> : null}
                 {queryBody ? (
                   <div className="space-y-3 border-t border-border pt-4">
+                    {queryBody.synthesized ? (
+                      <span
+                        className="inline-block rounded-md px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide"
+                        style={{ backgroundColor: ragAccentBg, color: ragAccent }}
+                      >
+                        Synthesized answer
+                      </span>
+                    ) : null}
                     <p className="text-[12px] leading-relaxed text-ink">{queryBody.message}</p>
                     <p className="text-[11px] text-subtle">Tokens: {formatTokens(queryBody.tokens_used)}</p>
                     {queryBody.citations.length > 0 ? (
