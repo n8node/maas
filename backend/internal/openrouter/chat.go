@@ -66,15 +66,24 @@ type chatResp struct {
 
 // Complete runs a single-turn chat (system + user) and returns assistant text + usage.
 func (c *ChatClient) Complete(ctx context.Context, system, user string) (string, ChatUsage, error) {
+	return c.CompleteWithModel(ctx, "", system, user)
+}
+
+// CompleteWithModel uses model when non-empty; otherwise c.Model.
+func (c *ChatClient) CompleteWithModel(ctx context.Context, model, system, user string) (string, ChatUsage, error) {
 	var u ChatUsage
 	if c.APIKey == "" {
 		return "", u, fmt.Errorf("openrouter: missing API key")
 	}
-	if c.Model == "" {
+	m := strings.TrimSpace(model)
+	if m == "" {
+		m = c.Model
+	}
+	if m == "" {
 		return "", u, fmt.Errorf("openrouter: missing chat model")
 	}
 	body, err := json.Marshal(chatReq{
-		Model: c.Model,
+		Model: m,
 		Messages: []map[string]string{
 			{"role": "system", "content": system},
 			{"role": "user", "content": user},

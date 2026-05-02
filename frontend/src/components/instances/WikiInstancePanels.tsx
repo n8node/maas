@@ -11,6 +11,7 @@ import {
   getWikiConcepts,
   getWikiHealth,
   getWikiProposals,
+  getWikiRepairConcepts,
   ingestInstance,
   ingestInstanceFile,
   patchInstance,
@@ -93,6 +94,7 @@ function proposalTagStyle(t: string): { bg: string; text: string } {
   const x = t.toLowerCase();
   if (x.includes("merge")) return { bg: "#fbeaf0", text: "#993556" };
   if (x.includes("split")) return { bg: "#e6f1fb", text: "#185fa5" };
+  if (x.includes("set_concept") || x === "set_concept_state") return { bg: "#faeeda", text: "#633806" };
   if (x.includes("noise")) return { bg: "#f3f2ef", text: "#5f5e5a" };
   return { bg: "#eeedfe", text: "#534ab7" };
 }
@@ -100,6 +102,13 @@ function proposalTagStyle(t: string): { bg: string; text: string } {
 function payloadTitle(payload: Record<string, unknown>): string | undefined {
   const title = payload.title;
   if (typeof title === "string" && title) return title;
+  const nrm = payload.normalized_title;
+  if (typeof nrm === "string" && nrm) return nrm;
+  const cid = payload.concept_id;
+  if (typeof cid === "string" && cid) {
+    const ns = payload.new_state;
+    return typeof ns === "string" ? `Concept ${cid.slice(0, 8)}… → ${ns}` : `Concept ${cid.slice(0, 8)}…`;
+  }
   const t0 = payload.titles;
   if (Array.isArray(t0) && t0.length && typeof t0[0] === "string") return String(t0[0]);
   return undefined;
@@ -150,7 +159,9 @@ export function WikiInstancePanels({
   const [previewConcepts, setPreviewConcepts] = useState<WikiConceptDTO[]>([]);
   const [actions, setActions] = useState<WikiActionLogEntryDTO[]>([]);
   const [proposals, setProposals] = useState<WikiProposalDTO[]>([]);
+  const [repairConcepts, setRepairConcepts] = useState<WikiConceptDTO[]>([]);
   const [triageBusy, setTriageBusy] = useState(false);
+  const [gardenerPlanOk, setGardenerPlanOk] = useState<boolean | null>(null);
   const [settingsBusy, setSettingsBusy] = useState(false);
 
   const autoExtract =
@@ -182,6 +193,7 @@ export function WikiInstancePanels({
     if (!token) return;
     try {
       const b = await billingMeRequest(token);
+      setGardenerPlanOk(b.plan?.gardener_enabled === true);
       let used = 0;
       for (const bucket of b.buckets) {
         used += bucket.tokens_used ?? 0;
@@ -189,6 +201,7 @@ export function WikiInstancePanels({
       setTokensMonth(used);
     } catch {
       setTokensMonth(null);
+      setGardenerPlanOk(null);
     }
   }, [token]);
 
@@ -201,8 +214,12 @@ export function WikiInstancePanels({
       } else if (tab === "actionlog") {
         setActions(await getWikiActionLog(token, instanceId));
       } else if (tab === "gardener") {
-        const p = await getWikiProposals(token, instanceId, "pending");
+        const [p, rc] = await Promise.all([
+          getWikiProposals(token, instanceId, "pending"),
+          getWikiRepairConcepts(token, instanceId),
+        ]);
         setProposals(p);
+        setRepairConcepts(rc);
         setPendingProposalCount(p.length);
       } else if (tab === "playground") {
         const list = await getWikiConcepts(token, instanceId);
@@ -338,8 +355,12 @@ export function WikiInstancePanels({
     setTriageBusy(true);
     try {
       await postWikiGardenerTriage(token, instanceId);
-      const p = await getWikiProposals(token, instanceId, "pending");
+      const [p, rc] = await Promise.all([
+        getWikiProposals(token, instanceId, "pending"),
+        getWikiRepairConcepts(token, instanceId),
+      ]);
       setProposals(p);
+      setRepairConcepts(rc);
       setPendingProposalCount(p.length);
       void loadHealth();
       setActions(await getWikiActionLog(token, instanceId));
@@ -896,6 +917,24 @@ export function WikiInstancePanels({
 
         {tab === "gardener" ? (
           <div className="w-full min-w-0 px-4 py-6 sm:px-6 lg:px-7">
+            {gardenerPlanOk === false ? (
+              <div
+                className="mb-4 rounded-lg border border-[#b5d4f4] px-4 py-3"
+                style={{ background: "#e6f1fb" }}
+              >
+                <p className="text-[13px] font-medium text-[#185fa5]">Gardener is not on your current plan</p>
+                <p className="mt-1 text-[12px] text-[#185fa5]/90">
+                  Phase 0 triage and LLM proposals require a plan with Gardener enabled. You can still review the repair
+                  list below.
+                </p>
+                <Link
+                  href="/billing"
+                  className="mt-2 inline-block text-[12px] font-medium text-[#185fa5] underline hover:opacity-90"
+                >
+                  View plans &amp; billing
+                </Link>
+              </div>
+            ) : null}
             <div
               className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#e8c9a0] px-4 py-3"
               style={{ background: "#faeeda" }}
@@ -904,11 +943,12 @@ export function WikiInstancePanels({
                 <p className="text-[13px] font-medium text-[#633806]">
                   {pendingProposalCount} proposal{pendingProposalCount === 1 ? "" : "s"} pending
                 </p>
-                <p className="text-[12px] text-[#633806]/90">Phase 0 triage complete — not applied until approved.</p>
+                <p className="text-[12px] text-[#633806]/90">Phase 0 triage (heuristic + optional LLM) — not applied until approved.</p>
               </div>
               <button
                 type="button"
-                disabled={triageBusy}
+                title={gardenerPlanOk === false ? "Upgrade your plan to run triage" : undefined}
+                disabled={triageBusy || gardenerPlanOk === false}
                 onClick={() => void onTriage()}
                 className="shrink-0 rounded-lg px-4 py-2 text-[12px] font-medium text-[#633806] hover:opacity-90 disabled:opacity-50"
                 style={{ background: "#e8c9a0", border: "1px solid #ba7517" }}
@@ -916,6 +956,39 @@ export function WikiInstancePanels({
                 {triageBusy ? "Running…" : "Run triage"}
               </button>
             </div>
+
+            {repairConcepts.length > 0 ? (
+              <div className="mb-6 rounded-[12px] border border-border bg-bg px-4 py-4 sm:px-5">
+                <h2 className="text-[10px] font-medium uppercase tracking-[0.12em] text-subtle">Repair queue</h2>
+                <p className="mt-1 text-[12px] text-muted">
+                  Concepts in stale, disputed, or weak state ({repairConcepts.length}).
+                </p>
+                <ul className="mt-3 space-y-2">
+                  {repairConcepts.slice(0, 12).map((c) => (
+                    <li
+                      key={c.id}
+                      className="flex flex-wrap items-baseline justify-between gap-2 border-b border-border pb-2 text-[13px] last:border-0 last:pb-0"
+                    >
+                      <span className="min-w-0 font-medium text-ink">{c.title}</span>
+                      <span
+                        className={clsx(
+                          "shrink-0 rounded px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide",
+                          stateBadgeClass(c.state ?? ""),
+                        )}
+                      >
+                        {c.state ?? "—"}
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+                {repairConcepts.length > 12 ? (
+                  <p className="mt-2 text-[11px] text-subtle">Showing 12 of {repairConcepts.length}.</p>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mb-6 text-[12px] text-muted">No concepts flagged for repair (stale / disputed / weak).</p>
+            )}
+
             <ul className="space-y-4">
               {proposals.map((p) => {
                 const tag = proposalTagStyle(p.proposal_type);
@@ -933,21 +1006,25 @@ export function WikiInstancePanels({
                       className="inline-block rounded px-2 py-0.5 text-[11px] font-medium capitalize"
                       style={{ backgroundColor: tag.bg, color: tag.text }}
                     >
-                      {p.proposal_type}
+                      {p.proposal_type.replace(/_/g, " ")}
                     </span>
                     <h3 className="mt-2 text-[14px] font-medium text-ink">{titleText}</h3>
                     <p className="mt-1 text-[12px] text-muted">
                       {typeof pay?.reason === "string"
                         ? pay.reason
-                        : "Review candidates — approve to apply merge/split or reject to dismiss."}
+                        : "Review — approve to apply or reject to dismiss."}
                     </p>
                     <div className="mt-4 flex flex-wrap gap-2">
                       <button
                         type="button"
                         onClick={async () => {
                           await approveWikiProposal(token, instanceId, p.id);
-                          const next = await getWikiProposals(token, instanceId, "pending");
+                          const [next, rc] = await Promise.all([
+                            getWikiProposals(token, instanceId, "pending"),
+                            getWikiRepairConcepts(token, instanceId),
+                          ]);
                           setProposals(next);
+                          setRepairConcepts(rc);
                           setPendingProposalCount(next.length);
                           void loadHealth();
                         }}

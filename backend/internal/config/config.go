@@ -27,6 +27,9 @@ type Config struct {
 	OpenRouterBaseURL         string `env:"OPENROUTER_BASE_URL" envDefault:"https://openrouter.ai/api/v1"`
 	OpenRouterEmbeddingModel  string `env:"OPENROUTER_EMBEDDING_MODEL" envDefault:"openai/text-embedding-3-small"`
 	OpenRouterChatModel       string `env:"OPENROUTER_CHAT_MODEL" envDefault:"openai/gpt-4o-mini"`
+	// Gardener: Phase 0 triage (cheap) and Phase 1 merge description (smarter; falls back to chat model if empty).
+	OpenRouterGardenerTriageModel  string `env:"OPENROUTER_GARDENER_TRIAGE_MODEL" envDefault:""`
+	OpenRouterGardenerRefactorModel string `env:"OPENROUTER_GARDENER_REFACTOR_MODEL" envDefault:""`
 }
 
 func Load() (*Config, error) {

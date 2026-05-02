@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/n8node/maas/backend/internal/auth"
+	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/memory"
 )
 
@@ -172,6 +173,33 @@ func (h *Wiki) Proposals(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"proposals": list}})
 }
 
+func (h *Wiki) RepairConcepts(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	id, err := uuid.Parse(chi.URLParam(r, "id"))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid id")
+		return
+	}
+	list, err := h.svc.ListWikiRepairConcepts(r.Context(), p.UserID, id)
+	if errors.Is(err, memory.ErrWikiOnly) {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if err != nil {
+		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"concepts": list}})
+}
+
 func (h *Wiki) Triage(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
@@ -192,11 +220,25 @@ func (h *Wiki) Triage(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
 		return
 	}
+	if errors.Is(err, memory.ErrGardenerNotAllowed) {
+		WriteError(w, http.StatusForbidden, "GARDENER_DISABLED", "gardener is not enabled on your plan")
+		return
+	}
+	if errors.Is(err, billing.ErrTokensExhausted) {
+		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
+		return
+	}
 	if err != nil {
 		WriteError(w, http.StatusInternalServerError, "INTERNAL", err.Error())
 		return
 	}
-	WriteJSON(w, http.StatusOK, map[string]any{"data": map[string]any{"proposals_added": n}})
+	data := map[string]any{
+		"proposals_added": n.ProposalsAdded,
+		"heuristic_added": n.HeuristicAdded,
+		"llm_added":       n.LLMAdded,
+		"tokens_used":     n.TokensUsed,
+	}
+	WriteJSON(w, http.StatusOK, map[string]any{"data": data})
 }
 
 type patchConceptBody struct {
@@ -274,6 +316,10 @@ func (h *Wiki) ApproveProposal(w http.ResponseWriter, r *http.Request) {
 	}
 	if errors.Is(err, memory.ErrWikiOnly) {
 		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	if errors.Is(err, billing.ErrTokensExhausted) {
+		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
 		return
 	}
 	if err != nil {

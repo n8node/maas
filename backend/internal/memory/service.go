@@ -25,6 +25,7 @@ var (
 	ErrEmptyContent        = errors.New("content must not be empty")
 	ErrEmptyQuery          = errors.New("query must not be empty")
 	ErrEmbeddingsDisabled  = errors.New("file ingestion requires OPENROUTER_API_KEY and embeddings")
+	ErrGardenerNotAllowed  = errors.New("gardener is not enabled on your plan")
 )
 
 const maxChunkRunes = 8000
@@ -34,6 +35,9 @@ type Service struct {
 	bill  *billing.Service
 	embed *openrouter.EmbeddingClient
 	chat  *openrouter.ChatClient
+	// Optional; from config. Empty means fall back to chat client model in helpers.
+	gardenerTriageModel   string
+	gardenerRefactorModel string
 }
 
 func NewService(pool *pgxpool.Pool, bill *billing.Service, opts ...ServiceOption) *Service {

@@ -124,6 +124,24 @@ func (s *Service) reconcileActivePlanBucket(ctx context.Context, userID uuid.UUI
 	return err
 }
 
+// GardenerEnabledForUser reports whether the user's active subscription plan has gardener enabled.
+func (s *Service) GardenerEnabledForUser(ctx context.Context, userID uuid.UUID) (bool, error) {
+	var enabled bool
+	err := s.pool.QueryRow(ctx, `
+		SELECT COALESCE(p.gardener_enabled, false)
+		FROM subscriptions s
+		JOIN plans p ON p.id = s.plan_id
+		WHERE s.user_id = $1 AND s.status = 'active'
+		LIMIT 1`, userID).Scan(&enabled)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return enabled, nil
+}
+
 func (s *Service) ConsumeTokens(ctx context.Context, userID uuid.UUID, amount int64) error {
 	if amount <= 0 {
 		return fmt.Errorf("amount must be positive")

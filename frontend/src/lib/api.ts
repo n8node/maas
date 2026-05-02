@@ -483,12 +483,31 @@ export async function getWikiProposals(token: string, instanceId: string, status
   return Array.isArray(proposals) ? proposals : [];
 }
 
-export async function postWikiGardenerTriage(token: string, instanceId: string): Promise<{ proposals_added: number }> {
+export async function getWikiRepairConcepts(token: string, instanceId: string): Promise<WikiConceptDTO[]> {
+  const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/repair`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data: { concepts: WikiConceptDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load repair concepts");
+  }
+  const concepts = data.data?.concepts;
+  return Array.isArray(concepts) ? concepts : [];
+}
+
+export type WikiTriageResultDTO = {
+  proposals_added: number;
+  heuristic_added: number;
+  llm_added: number;
+  tokens_used: number;
+};
+
+export async function postWikiGardenerTriage(token: string, instanceId: string): Promise<WikiTriageResultDTO> {
   const res = await fetch(`${API_BASE}/instances/${encodeURIComponent(instanceId)}/wiki/gardener/triage`, {
     method: "POST",
     headers: { Authorization: `Bearer ${token}` },
   });
-  const data = (await parseJson(res)) as { data: { proposals_added: number } } & Partial<ApiErrBody>;
+  const data = (await parseJson(res)) as { data: WikiTriageResultDTO } & Partial<ApiErrBody>;
   if (!res.ok) {
     throw new Error(data.error?.message ?? "Triage failed");
   }

@@ -53,6 +53,15 @@ func New(opts Options) http.Handler {
 	if strings.TrimSpace(opts.Config.OpenRouterAPIKey) != "" {
 		memOpts = append(memOpts, memory.WithEmbedder(openrouter.NewEmbeddingClient(opts.Config)))
 		memOpts = append(memOpts, memory.WithChat(openrouter.NewChatClient(opts.Config)))
+		gt := strings.TrimSpace(opts.Config.OpenRouterGardenerTriageModel)
+		if gt == "" {
+			gt = strings.TrimSpace(opts.Config.OpenRouterChatModel)
+		}
+		gr := strings.TrimSpace(opts.Config.OpenRouterGardenerRefactorModel)
+		if gr == "" {
+			gr = gt
+		}
+		memOpts = append(memOpts, memory.WithGardenerModels(gt, gr))
 	}
 	memSvc := memory.NewService(opts.Pool, bill, memOpts...)
 	instH := handler.NewInstances(memSvc)
@@ -92,6 +101,7 @@ func New(opts Options) http.Handler {
 			r.Get("/{id}/wiki/concepts", wikiH.Concepts)
 			r.Patch("/{id}/wiki/concepts/{conceptId}", wikiH.PatchConcept)
 			r.Get("/{id}/wiki/action-log", wikiH.ActionLog)
+			r.Get("/{id}/wiki/gardener/repair", wikiH.RepairConcepts)
 			r.Get("/{id}/wiki/gardener/proposals", wikiH.Proposals)
 			r.Post("/{id}/wiki/gardener/triage", wikiH.Triage)
 			r.Post("/{id}/wiki/gardener/proposals/{proposalId}/approve", wikiH.ApproveProposal)
