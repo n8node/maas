@@ -177,10 +177,24 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     return c;
   }, [buildConfig, seedText, wizFiles]);
 
-  function addWizFile() {
+  function addSampleWizFile() {
     const f = SAMPLE_WIZ_FILES[wizFileIdx % SAMPLE_WIZ_FILES.length];
     setWizFileIdx((i) => i + 1);
     setWizFiles((prev) => [...prev, { name: f.name, ext: f.ext }]);
+  }
+
+  function addWizFilesFromList(fileList: FileList | File[]) {
+    const list = Array.from(fileList);
+    if (list.length === 0) return;
+    setWizFiles((prev) => [
+      ...prev,
+      ...list.map((file) => {
+        const base = file.name.split(/[/\\]/).pop() ?? file.name;
+        const dot = base.lastIndexOf(".");
+        const ext = dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
+        return { name: base, ext };
+      }),
+    ]);
   }
 
   function removeWizFile(i: number) {
@@ -544,11 +558,33 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                   <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
                     Upload files (optional)
                   </h2>
-                  <button
-                    type="button"
-                    onClick={addWizFile}
-                    className="w-full cursor-pointer rounded-[12px] border-2 border-dashed border-border2 bg-bg px-4 py-4 text-left transition-colors hover:border-[#888] hover:bg-bg2"
+                  <label
+                    htmlFor="wiz-seed-files"
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                    }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (e.dataTransfer.files?.length) {
+                        addWizFilesFromList(e.dataTransfer.files);
+                      }
+                    }}
+                    className="block w-full cursor-pointer rounded-[12px] border-2 border-dashed border-border2 bg-bg px-4 py-4 text-left transition-colors hover:border-[#888] hover:bg-bg2"
                   >
+                    <input
+                      id="wiz-seed-files"
+                      type="file"
+                      multiple
+                      className="sr-only"
+                      onChange={(e) => {
+                        if (e.target.files?.length) {
+                          addWizFilesFromList(e.target.files);
+                        }
+                        e.target.value = "";
+                      }}
+                    />
                     <div className="mb-2 flex items-center gap-2 text-[12px] font-medium text-ink">
                       <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden>
                         <path
@@ -565,7 +601,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       Formats follow your plan (documents, audio, video). Queued here for reference — upload from the
                       instance Playground after creation.
                     </p>
-                  </button>
+                  </label>
                   {wizFiles.length > 0 ? (
                     <ul className="mt-3 space-y-1.5">
                       {wizFiles.map((f, i) => (
@@ -588,7 +624,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                   ) : null}
                   <button
                     type="button"
-                    onClick={addWizFile}
+                    onClick={addSampleWizFile}
                     className="mt-2 rounded-lg border border-border2 bg-transparent px-3 py-1.5 text-[12px] text-muted hover:bg-bg2"
                   >
                     + Add sample file
