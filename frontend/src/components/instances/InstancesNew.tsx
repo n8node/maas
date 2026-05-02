@@ -59,10 +59,6 @@ const DEFAULT_INSTANCE_MODEL_REFS = {
   extraction_model: "openai/gpt-4o-mini",
   embedding_model: "openai/text-embedding-3-small",
 } as const;
-const EPISODIC_EMBEDDING_MODELS = [
-  "text-embedding-3-large",
-  "text-embedding-3-small",
-] as const;
 const WIKI_CONCEPTS = ["fact", "entity", "event", "goal", "belief", "tension", "project", "pattern"] as const;
 const GARDENER_SCHEDULES = ["Every 24 hours", "Every 12 hours", "Manual only"] as const;
 const EPISODIC_DECAY_SCHEDULES = ["Every 24 hours (recommended)", "Every 12 hours", "Every 6 hours", "Manual only"] as const;
@@ -78,6 +74,16 @@ const EPISODIC_RETENTION_OPTIONS = [
   { value: "365", label: "1 year" },
   { value: "730", label: "2 years" },
 ] as const;
+
+/** Section titles on episodic wizard steps — match design / screenshots (10px uppercase). */
+const EPISODIC_SECTION_TITLE =
+  "mb-3 border-b border-border pb-2 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle";
+
+function episodicUseCaseLabel(id: "coach" | "support" | "personal"): string {
+  if (id === "coach") return "AI Coach / Therapist";
+  if (id === "support") return "Support Agent";
+  return "Personal Assistant";
+}
 
 function episodicDecayColor(weight: number): string {
   if (weight >= 0.5) return "#3b6d11";
@@ -150,9 +156,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     "Chronological memory for AI coaching sessions. Stores user conversations, mood check-ins, and progress notes per user.",
   );
   const [episodicUseCase, setEpisodicUseCase] = useState<"coach" | "support" | "personal">("coach");
-  const [episodicEmbeddingModel, setEpisodicEmbeddingModel] = useState<(typeof EPISODIC_EMBEDDING_MODELS)[number]>(
-    "text-embedding-3-large",
-  );
   const [decayRate, setDecayRate] = useState(14);
   const [decayWorkerEnabled, setDecayWorkerEnabled] = useState(true);
   const [decaySchedule, setDecaySchedule] = useState<string>(EPISODIC_DECAY_SCHEDULES[0]);
@@ -226,7 +229,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
       return {
         description: episodicDescription.trim() || undefined,
         use_case: episodicUseCase,
-        embedding_model: episodicEmbeddingModel,
         decay: {
           daily_factor: Number(decayRateDaily.toFixed(2)),
           auto_worker: decayWorkerEnabled,
@@ -270,7 +272,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     decaySchedule,
     decayWorkerEnabled,
     episodicDescription,
-    episodicEmbeddingModel,
     episodicRetention,
     episodicUseCase,
     gardenerEnabled,
@@ -496,9 +497,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </p>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Identity
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Identity</h2>
                   <div className="space-y-3.5">
                     <div>
                       <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-name">
@@ -528,35 +527,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </section>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Embedding model
-                  </h2>
-                  <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-embed">
-                    Model
-                  </label>
-                  <select
-                    id="episodic-embed"
-                    className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px] text-ink outline-none focus:border-[#3b6d11]"
-                    value={episodicEmbeddingModel}
-                    onChange={(e) =>
-                      setEpisodicEmbeddingModel(e.target.value as (typeof EPISODIC_EMBEDDING_MODELS)[number])
-                    }
-                  >
-                    {EPISODIC_EMBEDDING_MODELS.map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-2 rounded-lg border border-[#c8d8f0] bg-[#f0f4fb] px-3 py-2 text-[12px] text-[#1d3a6b]">
-                    Episodic memory stores episodes as-is with embeddings only. No extraction model needed.
-                  </p>
-                </section>
-
-                <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Use case preview
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Use case preview</h2>
                   <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                     {(
                       [
@@ -572,12 +543,14 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                           type="button"
                           onClick={() => setEpisodicUseCase(id)}
                           className={clsx(
-                            "rounded-lg border px-3 py-2 text-left transition-colors",
-                            selected ? "border-[#3b6d11] bg-[#eaf3de]" : "border-border hover:border-border2",
+                            "rounded-[12px] border p-3.5 text-left transition-colors",
+                            selected
+                              ? "border-2 border-[#3b6d11] bg-[#eaf3de]"
+                              : "border border-border bg-bg2 hover:border-border2",
                           )}
                         >
-                          <div className="text-[12px] font-medium text-ink">{title}</div>
-                          <p className="mt-0.5 text-[11px] text-subtle">{desc}</p>
+                          <div className="text-[13px] font-medium text-ink">{title}</div>
+                          <p className="mt-1 text-[11px] leading-snug text-subtle">{desc}</p>
                         </button>
                       );
                     })}
@@ -594,9 +567,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </p>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Decay rate
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Decay rate</h2>
                   <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
                     <span>Daily decay factor</span>
                     <span className="font-medium text-[#3b6d11]">{decayRateDaily.toFixed(2)} / day</span>
@@ -644,9 +615,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </section>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Decay schedule
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Decay schedule</h2>
                   <div className="flex items-center justify-between border-b border-border py-2">
                     <div>
                       <div className="text-[13px] text-ink">Automatic decay worker</div>
@@ -674,9 +643,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </section>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Retrieval threshold
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Retrieval threshold</h2>
                   <div className="mb-1 flex items-center justify-between text-[12px] text-muted">
                     <span>Minimum weight in results</span>
                     <span className="font-medium text-[#3b6d11]">weight ≥ {(retrievalThreshold / 100).toFixed(2)}</span>
@@ -701,9 +668,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </p>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Enable bi-temporal
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Enable bi-temporal</h2>
                   <div className="flex items-center justify-between border-b border-border py-2">
                     <div>
                       <div className="text-[13px] text-ink">Bi-temporal facts</div>
@@ -763,9 +728,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                   One Episodic instance can serve many users with user_id and optional session_id scoping.
                 </p>
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Scoping mode
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Scoping mode</h2>
                   <div className="flex items-center justify-between border-b border-border py-2">
                     <div>
                       <div className="text-[13px] text-ink">Enable user_id scoping</div>
@@ -790,9 +753,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </section>
 
                 <section className="mt-6">
-                  <h2 className="mb-3 border-b border-border pb-2 text-[12px] font-medium uppercase tracking-[0.05em] text-muted">
-                    Retention policy
-                  </h2>
+                  <h2 className={EPISODIC_SECTION_TITLE}>Retention policy</h2>
                   <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-retention">
                     Maximum episode age
                   </label>
@@ -826,7 +787,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     [
                       ["Memory type", "Episodic"],
                       ["Name", name.trim() || "—"],
-                      ["Embedding model", episodicEmbeddingModel],
+                      ["Use case", episodicUseCaseLabel(episodicUseCase)],
                       ["Decay rate", `${decayRateDaily.toFixed(2)} / day · ~${decayHalfLifeDays} days half-life`],
                       ["Decay worker", decayWorkerEnabled ? decaySchedule : "Disabled"],
                       ["Bi-temporal facts", biTemporalEnabled ? "Enabled" : "Disabled"],
@@ -852,7 +813,9 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 <div className="mt-4 flex items-center justify-between rounded-lg border border-[#8ec95c] bg-[#eaf3de] px-3.5 py-3">
                   <div>
                     <div className="text-[12px] text-[#2d6b0f]">Cost estimate</div>
-                    <div className="text-[10px] text-[#2d6b0f]/80">Embedding only — no extraction model cost</div>
+                    <div className="text-[10px] text-[#2d6b0f]/80">
+                      Episodes are indexed for search; embeddings use the default model configured on the server.
+                    </div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-medium text-[#3b6d11]">~$0.002</div>
