@@ -10,7 +10,7 @@ import { getToken } from "@/lib/token";
 type Props = {
   user: MeUser;
   onLogout?: () => void;
-  title: string;
+  title: React.ReactNode;
   headerRight?: React.ReactNode;
   children: React.ReactNode;
 };
@@ -46,10 +46,10 @@ export function InstancesShell({ user, onLogout, title, headerRight, children }:
       />
       <div className="flex min-h-screen flex-col">
         <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">
-          <span className="text-[15px] font-medium text-ink">{title}</span>
+          <div className="text-[15px] font-medium text-ink">{title}</div>
           {headerRight ? <div className="flex items-center gap-2">{headerRight}</div> : null}
         </header>
-        {children}
+        <div className="flex min-h-0 flex-1 flex-col">{children}</div>
       </div>
     </div>
   );
