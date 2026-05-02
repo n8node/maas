@@ -5,7 +5,15 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { InstancesShell } from "@/components/instances/InstancesShell";
-import { billingMeRequest, createInstance, listInstances, type BillingMeData, type MeUser } from "@/lib/api";
+import {
+  billingMeRequest,
+  createInstance,
+  ingestInstance,
+  ingestInstanceFile,
+  listInstances,
+  type BillingMeData,
+  type MeUser,
+} from "@/lib/api";
 import { getToken } from "@/lib/token";
 import clsx from "clsx";
 
@@ -38,8 +46,11 @@ const MEMORY_TYPES: Array<{
   },
 ];
 
-const EXTRACTION_MODELS = ["Gemini 2.5 Flash", "Claude Haiku 4.5"] as const;
-const EMBEDDING_MODELS = ["text-embedding-3-large", "text-embedding-3-small"] as const;
+/** Stored in instance config; runtime chat/embeddings use server OPENROUTER_* (defaults: OpenAI via OpenRouter). */
+const DEFAULT_INSTANCE_MODEL_REFS = {
+  extraction_model: "openai/gpt-4o-mini",
+  embedding_model: "openai/text-embedding-3-small",
+} as const;
 const WIKI_CONCEPTS = ["fact", "entity", "event", "goal", "belief", "tension", "project", "pattern"] as const;
 const GARDENER_SCHEDULES = ["Every 24 hours", "Every 12 hours", "Manual only"] as const;
 
@@ -103,8 +114,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     searchParams.get("type") === "rag" ? "rag" : "wiki",
   );
   const [name, setName] = useState("Product Knowledge Base");
-  const [extractionModel, setExtractionModel] = useState<string>(EXTRACTION_MODELS[0]);
-  const [embeddingModel, setEmbeddingModel] = useState<string>(EMBEDDING_MODELS[0]);
   const [conceptPick, setConceptPick] = useState(defaultConcepts);
   const [gardenerEnabled, setGardenerEnabled] = useState(true);
   const [gardenerSchedule, setGardenerSchedule] = useState<string>(GARDENER_SCHEDULES[0]);
@@ -115,7 +124,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
   const [hierarchicalClustering, setHierarchicalClustering] = useState(true);
 
   const [seedText, setSeedText] = useState("");
-  const [wizFiles, setWizFiles] = useState<Array<{ name: string; ext: string }>>([]);
+  const [wizFiles, setWizFiles] = useState<File[]>([]);
 
   const [billing, setBilling] = useState<BillingMeData | null>(null);
   const [instanceTotal, setInstanceTotal] = useState(0);
@@ -138,8 +147,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   const buildConfig = useCallback(() => {
     const base = {
-      extraction_model: extractionModel,
-      embedding_model: embeddingModel,
+      ...DEFAULT_INSTANCE_MODEL_REFS,
       scoping: { user_id: userScoping, session_id: sessionScoping },
     };
     if (memoryType === "wiki") {
@@ -159,8 +167,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     chunkOverlap,
     chunkSize,
     conceptPick,
-    embeddingModel,
-    extractionModel,
     gardenerEnabled,
     gardenerSchedule,
     hierarchicalClustering,
@@ -174,24 +180,13 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     if (seedText.trim()) {
       c.seed_draft_text = seedText.trim();
     }
-    if (wizFiles.length) {
-      c.wizard_queued_files = wizFiles.map((f) => f.name);
-    }
     return c;
-  }, [buildConfig, seedText, wizFiles]);
+  }, [buildConfig, seedText]);
 
   function addWizFilesFromList(fileList: FileList | File[]) {
     const list = Array.from(fileList);
     if (list.length === 0) return;
-    setWizFiles((prev) => [
-      ...prev,
-      ...list.map((file) => {
-        const base = file.name.split(/[/\\]/).pop() ?? file.name;
-        const dot = base.lastIndexOf(".");
-        const ext = dot >= 0 ? base.slice(dot + 1).toLowerCase() : "";
-        return { name: base, ext };
-      }),
-    ]);
+    setWizFiles((prev) => [...prev, ...list]);
   }
 
   function removeWizFile(i: number) {
@@ -224,6 +219,31 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
         memory_type: memoryType,
         config: configPayload,
       });
+      const failures: string[] = [];
+      const st = seedText.trim();
+      if (st) {
+        try {
+          if (memoryType === "wiki") {
+            await ingestInstance(token, id, { text: st, source_title: "Wizard seed" });
+          } else {
+            await ingestInstance(token, id, { text: st, source_label: "wizard-seed" });
+          }
+        } catch (e) {
+          failures.push(`Seed text: ${e instanceof Error ? e.message : "failed"}`);
+        }
+      }
+      for (const file of wizFiles) {
+        try {
+          await ingestInstanceFile(token, id, file);
+        } catch (e) {
+          failures.push(`${file.name}: ${e instanceof Error ? e.message : "upload failed"}`);
+        }
+      }
+      if (failures.length > 0) {
+        window.alert(
+          `Instance was created, but some wizard ingests failed:\n\n${failures.join("\n")}\n\nYou can retry from the Playground.`,
+        );
+      }
       router.push(`/instances/${id}`);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Could not create instance");
@@ -364,42 +384,12 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                           maxLength={128}
                         />
                       </div>
-                      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-                        <div>
-                          <label className="mb-1.5 flex flex-wrap items-center gap-2 text-[12px] text-muted" htmlFor="ex-model">
-                            Extraction model
-                            <span className="text-[11px] font-normal text-[#ba7517]">cheap · low reasoning</span>
-                          </label>
-                          <select
-                            id="ex-model"
-                            className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[13px] text-ink"
-                            value={extractionModel}
-                            onChange={(e) => setExtractionModel(e.target.value)}
-                          >
-                            {EXTRACTION_MODELS.map((m) => (
-                              <option key={m} value={m}>
-                                {m}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="mb-1.5 block text-[12px] text-muted" htmlFor="emb-model">
-                            Embedding model
-                          </label>
-                          <select
-                            id="emb-model"
-                            className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[13px] text-ink"
-                            value={embeddingModel}
-                            onChange={(e) => setEmbeddingModel(e.target.value)}
-                          >
-                            {EMBEDDING_MODELS.map((m) => (
-                              <option key={m} value={m}>
-                                {m}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
+                      <div className="rounded-lg border border-border bg-bg2 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
+                        Extraction and embeddings use{" "}
+                        <strong className="font-medium text-ink">OpenAI models via OpenRouter</strong> from server settings (
+                        <code className="rounded bg-bg px-1 font-mono text-[10px]">OPENROUTER_CHAT_MODEL</code>,{" "}
+                        <code className="rounded bg-bg px-1 font-mono text-[10px]">OPENROUTER_EMBEDDING_MODEL</code>). No need
+                        to pick models here.
                       </div>
                     </div>
                   </section>
@@ -548,7 +538,8 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
               <>
                 <h1 className="text-base font-medium tracking-tight text-ink">Ingest &amp; sources</h1>
                 <p className="mt-1 text-[13px] text-muted">
-                  Optionally add your first data sources. You can always add more from the Playground.
+                  Optional seed text and files. Files you add here are ingested automatically right after the instance is
+                  created.
                 </p>
 
                 <section className="mt-6">
@@ -595,9 +586,8 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       Drop files or click to browse
                     </div>
                     <p className="text-[11px] text-subtle">
-                      For Wiki instances only file names are saved with the instance as a checklist — content is not uploaded
-                      until you use <strong className="font-medium text-ink">Upload document</strong> or paste text in the
-                      Playground after creation.
+                      Supported types for auto-ingest follow the Playground (e.g. .docx, .txt, .md). Same pipeline as
+                      &quot;Upload document&quot; after you create the instance.
                     </p>
                   </label>
                   {wizFiles.length > 0 ? (
@@ -646,11 +636,10 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                     [
                       ["Memory type", typeMeta.name],
                       ["Name", name.trim() || "—"],
-                      ["Extraction model", extractionModel],
-                      ["Embedding model", embeddingModel],
+                      ["Models", "OpenAI via OpenRouter (server defaults)"],
                       ["User_id scoping", userScoping ? "Enabled" : "Disabled"],
                       ["Session_id scoping", sessionScoping ? "Enabled" : "Disabled"],
-                      ["Files queued", wizFiles.length ? `${wizFiles.length} file(s)` : "None — add from Playground"],
+                      ["Files at create", wizFiles.length ? `${wizFiles.length} file(s) — auto-ingest after Create` : "None"],
                       ["Plan", planLine],
                     ] as const
                   ).map(([k, v]) => (
@@ -666,7 +655,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
                 {wizFiles.length > 0 ? (
                   <div className="mt-3 rounded-lg bg-bg2 px-3 py-2.5">
-                    <div className="mb-1.5 text-[11px] font-medium text-muted">Files to ingest after creation</div>
+                    <div className="mb-1.5 text-[11px] font-medium text-muted">Queued files (upload runs automatically after Create)</div>
                     <ul className="space-y-1 text-[11px] text-ink">
                       {wizFiles.map((f, i) => (
                         <li key={`${f.name}-${i}`}> · {f.name}</li>
@@ -687,8 +676,9 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                 </div>
 
                 <div className="mt-4 rounded-lg bg-[#e6f1fb] px-3.5 py-2.5 text-[12px] leading-snug text-accent">
-                  After creation, open the Playground and ingest files with <strong className="font-medium">Upload document</strong>{" "}
-                  or paste text. Wizard file names are reminders only.
+                  After you click <strong className="font-medium">Create instance</strong>, the wizard ingests any seed text
+                  and each queued file into this instance (same API as the Playground). Large files may take a moment; check
+                  the instance Playground for status.
                 </div>
 
                 {err ? (

@@ -24,7 +24,7 @@ type ChatClient struct {
 func NewChatClient(cfg *config.Config) *ChatClient {
 	m := strings.TrimSpace(cfg.OpenRouterChatModel)
 	if m == "" {
-		m = "google/gemini-2.0-flash-001"
+		m = "openai/gpt-4o-mini"
 	}
 	return &ChatClient{
 		BaseURL: strings.TrimSuffix(cfg.OpenRouterBaseURL, "/"),
