@@ -24,7 +24,7 @@ const EPISODIC_STEP_LABELS = ["Basics", "Decay", "Bi-temporal", "Scoping", "Revi
 const EPISODIC_STEP_HINTS = [
   "Name & description",
   "Forgetting curve settings",
-  "Time tracking for bots",
+  "Time tracking for facts",
   "user_id & session_id",
   "Confirm and launch",
 ] as const;
@@ -740,49 +740,137 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
             {isEpisodicWizard && step === 3 ? (
               <>
+                <div className="mb-1 flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#3b6d11]">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+                    <circle cx="12" cy="12" r="9" />
+                    <path strokeLinecap="round" d="M12 7v6l4 2" />
+                  </svg>
+                  Step 3 · Bi-temporal tracking
+                </div>
                 <h1 className="text-base font-medium tracking-tight text-ink">Two timelines for every episode</h1>
-                <p className="mt-1 text-[13px] text-muted">
-                  Bi-temporal facts track real-world valid time and system recording time independently.
+                <p className="mt-2 max-w-2xl text-[13px] leading-relaxed text-muted">
+                  Bi-temporal facts track two independent timestamps: when something actually happened in the real world, and
+                  when your system recorded it. This lets you query the state of memory at any past moment.
                 </p>
 
-                <section className="mt-6">
+                <section className="mt-7">
                   <h2 className={EPISODIC_SECTION_TITLE}>Enable bi-temporal</h2>
-                  <div className="flex items-center justify-between border-b border-border py-2">
-                    <div>
-                      <div className="text-[13px] text-ink">Bi-temporal facts</div>
-                      <div className="text-[11px] text-subtle">Store valid_from/valid_until for point-in-time queries.</div>
+                  <div className="flex items-start justify-between gap-3 border-b border-border py-2.5">
+                    <div className="min-w-0 pr-2">
+                      <div className="text-[13px] font-medium text-ink">Bi-temporal facts</div>
+                      <p className="mt-1 text-[12px] leading-snug text-subtle">
+                        Store{" "}
+                        <code className="rounded bg-bg2 px-1 py-0.5 font-mono text-[10px] text-ink">valid_from</code> /{" "}
+                        <code className="rounded bg-bg2 px-1 py-0.5 font-mono text-[10px] text-ink">valid_until</code>{" "}
+                        alongside system timestamps. Required for point-in-time queries.
+                      </p>
                     </div>
-                    <Toggle id="episodic-bitemp" on={biTemporalEnabled} onToggle={() => setBiTemporalEnabled((v) => !v)} />
+                    <Toggle
+                      id="episodic-bitemp"
+                      accent="episodic"
+                      on={biTemporalEnabled}
+                      onToggle={() => setBiTemporalEnabled((v) => !v)}
+                    />
                   </div>
                 </section>
 
-                <section className={clsx("mt-6 space-y-6 transition-opacity", biTemporalEnabled ? "opacity-100" : "pointer-events-none opacity-50")}>
-                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
-                      <div className="text-[11px] font-medium text-muted">Valid time</div>
-                      <p className="mt-1 text-[12px] text-subtle">When an event actually happened in the real world.</p>
+                <section
+                  className={clsx(
+                    "mt-7 space-y-6 transition-opacity duration-200",
+                    biTemporalEnabled ? "opacity-100" : "pointer-events-none opacity-45",
+                  )}
+                >
+                  <div>
+                    <h2 className={EPISODIC_SECTION_TITLE}>What the two timelines mean</h2>
+                    <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                      <div className="rounded-[12px] border border-border bg-bg px-3.5 py-3.5">
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#eaf3de] text-[#3b6d11]" aria-hidden>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <circle cx="12" cy="12" r="9" />
+                              <path strokeLinecap="round" d="M12 7v6l4 2" />
+                            </svg>
+                          </span>
+                          <span className="text-[12px] font-medium text-ink">Valid time</span>
+                        </div>
+                        <p className="text-[12px] leading-relaxed text-subtle">
+                          When the event actually happened in the real world. Set by you at ingest time — can be in the past.
+                        </p>
+                        <pre className="mt-2.5 overflow-x-auto rounded-lg border border-border bg-bg2 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-ink">
+                          valid_from: &quot;2024-03-15&quot;
+                        </pre>
+                      </div>
+                      <div className="rounded-[12px] border border-border bg-bg px-3.5 py-3.5">
+                        <div className="mb-2 flex items-center gap-2">
+                          <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#eaf3de] text-[#3b6d11]" aria-hidden>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 5v14M5 12l7-7 7 7" />
+                            </svg>
+                          </span>
+                          <span className="text-[12px] font-medium text-ink">System time</span>
+                        </div>
+                        <p className="text-[12px] leading-relaxed text-subtle">
+                          When your system recorded the episode. Set automatically by Mnemoniqa at ingest time.
+                        </p>
+                        <pre className="mt-2.5 overflow-x-auto rounded-lg border border-border bg-bg2 px-2.5 py-2 font-mono text-[11px] leading-relaxed text-ink">
+                          system_time: now()
+                        </pre>
+                      </div>
                     </div>
-                    <div className="rounded-lg border border-border bg-bg px-3 py-2.5">
-                      <div className="text-[11px] font-medium text-muted">System time</div>
-                      <p className="mt-1 text-[12px] text-subtle">When your system recorded the episode.</p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center justify-between border-b border-border py-2">
-                    <div>
-                      <div className="text-[13px] text-ink">Enable historical projection</div>
-                      <div className="text-[11px] text-subtle">Allow queries with as_of date snapshots.</div>
-                    </div>
-                    <Toggle id="episodic-pit" on={pointInTimeEnabled} onToggle={() => setPointInTimeEnabled((v) => !v)} />
                   </div>
 
                   <div>
+                    <h2 className={EPISODIC_SECTION_TITLE}>Point-in-time queries</h2>
+                    <div className="flex items-start justify-between gap-3 border-b border-border py-2.5">
+                      <div className="min-w-0 pr-2">
+                        <div className="text-[13px] font-medium text-ink">Enable historical projection</div>
+                        <p className="mt-1 text-[12px] leading-relaxed text-subtle">
+                          Query the state of memory at any past date. &quot;What did we know about this user on March 15,
+                          2024?&quot;
+                        </p>
+                      </div>
+                      <Toggle
+                        id="episodic-pit"
+                        accent="episodic"
+                        on={pointInTimeEnabled}
+                        onToggle={() => setPointInTimeEnabled((v) => !v)}
+                      />
+                    </div>
+
+                    <div className="mt-4 rounded-[12px] border border-border bg-bg2 px-3.5 py-3">
+                      <div className="mb-2 font-mono text-[11px] font-medium text-muted">POST /api/v1/instances/:id/query</div>
+                      <pre className="font-mono text-[11px] leading-[1.55] text-ink">
+                        <span className="text-accent">{`{`}</span>
+                        {"\n"}
+                        {`  `}
+                        <span className="text-accent">&quot;query&quot;</span>
+                        {`: `}
+                        <span className="text-[#534ab7]">&quot;What happened last week?&quot;</span>
+                        {`,\n`}
+                        {`  `}
+                        <span className="text-accent">&quot;user_id&quot;</span>
+                        {`: `}
+                        <span className="text-[#534ab7]">&quot;user_123&quot;</span>
+                        {`,\n`}
+                        {`  `}
+                        <span className="text-accent">&quot;as_of&quot;</span>
+                        {`: `}
+                        <span className="text-[#534ab7]">&quot;2024-03-15&quot;</span>
+                        <span className="text-subtle">{" // point-in-time"}</span>
+                        {"\n"}
+                        <span className="text-accent">{`}`}</span>
+                      </pre>
+                    </div>
+                  </div>
+
+                  <div>
+                    <h2 className={EPISODIC_SECTION_TITLE}>Invalidation behaviour</h2>
                     <label className="mb-1.5 block text-[12px] text-muted" htmlFor="episodic-invalidation">
-                      Invalidation behaviour
+                      When a fact is corrected or expires
                     </label>
                     <select
                       id="episodic-invalidation"
-                      className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px]"
+                      className="h-[38px] w-full rounded-lg border border-border2 bg-bg px-2.5 text-[12px] outline-none focus:border-[#3b6d11]"
                       value={invalidationMode}
                       onChange={(e) =>
                         setInvalidationMode(e.target.value as (typeof EPISODIC_INVALIDATION_OPTIONS)[number]["value"])
@@ -794,6 +882,18 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                         </option>
                       ))}
                     </select>
+                    <div className="mt-3 flex gap-2.5 rounded-[12px] border border-[#c8d8f0] bg-[#e6f1fb] px-3.5 py-3 text-[12px] leading-relaxed text-[#185fa5]">
+                      <span className="mt-0.5 shrink-0" aria-hidden>
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#185fa5" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <path strokeLinecap="round" d="M12 16v-4M12 8h.01" />
+                        </svg>
+                      </span>
+                      <p>
+                        &apos;Close valid_until&apos; is the safest option — it preserves full history for point-in-time
+                        queries while excluding the episode from current results.
+                      </p>
+                    </div>
                   </div>
                 </section>
               </>
