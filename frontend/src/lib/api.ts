@@ -444,6 +444,9 @@ export type EpisodicStatsDTO = {
   users_count: number;
   oldest_entry?: string;
   coverage: number;
+  queries_today: number;
+  history_months: number;
+  anchored_pct: number;
 };
 
 export type EpisodicEpisodeDTO = {

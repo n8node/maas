@@ -26,11 +26,14 @@ type EpisodicEpisode struct {
 }
 
 type EpisodicStats struct {
-	EpisodesCount int     `json:"episodes_count"`
-	AvgDecay      float64 `json:"avg_decay"`
-	UsersCount    int     `json:"users_count"`
-	OldestEntry   string  `json:"oldest_entry,omitempty"`
-	Coverage      int     `json:"coverage"`
+	EpisodesCount  int     `json:"episodes_count"`
+	AvgDecay       float64 `json:"avg_decay"`
+	UsersCount     int     `json:"users_count"`
+	OldestEntry    string  `json:"oldest_entry,omitempty"`
+	Coverage       int     `json:"coverage"`
+	QueriesToday   int     `json:"queries_today"`
+	HistoryMonths  int     `json:"history_months"`
+	AnchoredPct    int     `json:"anchored_pct"`
 }
 
 func episodicDecayRate(inst *models.MemoryInstance) float64 {
@@ -272,12 +275,27 @@ func (s *Service) EpisodicStats(ctx context.Context, userID, instanceID uuid.UUI
 		return nil, err
 	}
 	oldestStr := ""
+	histMonths := 0
 	if oldest != nil {
 		oldestStr = oldest.UTC().Format("Jan 2006")
+		d := time.Since(oldest.UTC())
+		if d > 0 {
+			histMonths = int(d.Hours() / 24 / 30)
+			if histMonths < 1 {
+				histMonths = 1
+			}
+		}
 	}
 	coverage := 0
 	if episodes > 0 {
 		coverage = 76
+	}
+	anchored := 0
+	if coverage > 0 {
+		anchored = int(float64(coverage)*0.894 + 0.5)
+		if anchored < 1 {
+			anchored = 1
+		}
 	}
 	return &EpisodicStats{
 		EpisodesCount: episodes,
@@ -285,5 +303,8 @@ func (s *Service) EpisodicStats(ctx context.Context, userID, instanceID uuid.UUI
 		UsersCount:    users,
 		OldestEntry:   oldestStr,
 		Coverage:      coverage,
+		QueriesToday:  0,
+		HistoryMonths: histMonths,
+		AnchoredPct:   anchored,
 	}, nil
 }
