@@ -19,23 +19,11 @@ import {
   type WorkingSessionRowDTO,
   type WorkingStatsDTO,
 } from "@/lib/api";
+import { MemoryTypePillsRow } from "@/components/instances/MemoryTypePillsRow";
 import { formatFileSize } from "@/lib/format";
 import { getToken } from "@/lib/token";
 
 type WorkingTab = "sessions" | "keys" | "settings";
-
-const wCol = "#854f0b";
-const wBg = "#faeeda";
-
-const MEMORY_PILLS = [
-  { id: "rag", label: "RAG", href: "/instances/new?type=rag", col: "#185fa5", bg: "#e6f1fb", soon: false },
-  { id: "wiki", label: "Wiki", href: "/instances/new?type=wiki", col: "#534ab7", bg: "#eeedfe", soon: false },
-  { id: "episodic", label: "Episodic", href: "/instances/new?type=episodic", col: "#3b6d11", bg: "#eaf3de", soon: false },
-  { id: "working", label: "Working", href: "#", col: wCol, bg: wBg, soon: false },
-  { id: "graph", label: "Graph", href: "/instances/new?type=graph", col: "#993c1d", bg: "#faece7", soon: false },
-  { id: "reflective", label: "Reflective", href: "#", col: "#993556", bg: "#fbeaf0", soon: true },
-  { id: "agent", label: "Agent (unified)", href: "#", col: "#1a1a1a", bg: "#f3f2ef", soon: true },
-] as const;
 
 function formatCompactCount(n: number): string {
   if (!Number.isFinite(n) || n < 0) return "0";
@@ -342,44 +330,7 @@ export function WorkingInstancePanels({
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-bg3">
       <div className="border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
-        <div className="flex flex-wrap gap-2">
-          {MEMORY_PILLS.map((p) => {
-            const active = p.id === "working";
-            if (p.soon) {
-              return (
-                <span
-                  key={p.id}
-                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-border bg-bg2 px-3 py-1.5 text-[12px] text-muted opacity-60"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-border2" aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
-            if (active) {
-              return (
-                <span
-                  key={p.id}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium text-ink shadow-sm"
-                  style={{ borderColor: p.col, backgroundColor: p.bg }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.col }} aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
-            return (
-              <Link
-                key={p.id}
-                href={p.href}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border2 bg-bg px-3 py-1.5 text-[12px] text-muted hover:bg-bg2 hover:text-ink"
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.col }} aria-hidden />
-                {p.label}
-              </Link>
-            );
-          })}
-        </div>
+        <MemoryTypePillsRow activeId="working" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">

@@ -5,22 +5,13 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 
 import { ingestInstance, patchInstance, type MemoryInstanceDTO } from "@/lib/api";
+import { MemoryTypePillsRow } from "@/components/instances/MemoryTypePillsRow";
 import { getToken } from "@/lib/token";
 
 type GraphTab = "playground" | "entities" | "relations" | "repair" | "settings";
 
 const gCol = "#993c1d";
 const gBg = "#faece7";
-
-const MEMORY_PILLS = [
-  { id: "rag", label: "RAG", href: "/instances/new?type=rag", col: "#185fa5", bg: "#e6f1fb", soon: false },
-  { id: "wiki", label: "Wiki", href: "/instances/new?type=wiki", col: "#534ab7", bg: "#eeedfe", soon: false },
-  { id: "episodic", label: "Episodic", href: "/instances/new?type=episodic", col: "#3b6d11", bg: "#eaf3de", soon: false },
-  { id: "working", label: "Working", href: "/instances/new?type=working", col: "#854f0b", bg: "#faeeda", soon: false },
-  { id: "graph", label: "Graph", href: "#", col: gCol, bg: gBg, soon: false },
-  { id: "reflective", label: "Reflective", href: "#", col: "#993556", bg: "#fbeaf0", soon: true },
-  { id: "agent", label: "Agent (unified)", href: "/agents", col: "#1a1a1a", bg: "#f3f2ef", soon: false },
-] as const;
 
 const MOCK_ENTITIES = [
   { name: "MemoryService", type: "product", typeCol: "#185fa5", typeBg: "#e6f1fb", confidence: 0.93, relations: 3 },
@@ -319,45 +310,7 @@ export function GraphInstancePanels({
         </span>
       </div>
       <div className="border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
-        <div className="flex flex-wrap gap-2">
-          {MEMORY_PILLS.map((p) => {
-            const active = p.id === "graph";
-            if (active) {
-              return (
-                <span
-                  key={p.id}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium text-ink shadow-sm"
-                  style={{ borderColor: p.col, backgroundColor: p.bg }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.col }} aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
-            if (p.soon) {
-              return (
-                <span
-                  key={p.id}
-                  title="Coming soon"
-                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-border bg-bg2 px-3 py-1.5 text-[12px] text-muted opacity-60"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-border2" aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
-            return (
-              <Link
-                key={p.id}
-                href={p.href}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border2 bg-bg px-3 py-1.5 text-[12px] text-muted hover:bg-bg2 hover:text-ink"
-              >
-                <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.col }} aria-hidden />
-                {p.label}
-              </Link>
-            );
-          })}
-        </div>
+        <MemoryTypePillsRow activeId="graph" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">

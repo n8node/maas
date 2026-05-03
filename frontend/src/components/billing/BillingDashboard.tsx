@@ -372,14 +372,23 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
                         <div className="text-[13px] font-medium text-ink">
                           {plan ? (
                             <>
-                              — / {plan.max_instances >= 100000 ? "∞" : plan.max_instances}
+                              {instanceCount} / {plan.max_instances >= 100000 ? "∞" : plan.max_instances}
                             </>
                           ) : (
-                            "—"
+                            `${instanceCount} / —`
                           )}
                         </div>
-                        <div className="mt-1 h-0.5 overflow-hidden rounded-sm bg-bg2" />
-                        <div className="mt-0.5 text-[10px] text-subtle">Usage tracking soon</div>
+                        <div className="mt-1 h-0.5 overflow-hidden rounded-sm bg-bg2">
+                          {plan && plan.max_instances > 0 && plan.max_instances < 100000 ? (
+                            <div
+                              className={clsx("h-full rounded-sm", instanceCount >= plan.max_instances ? "bg-warn" : "bg-accent")}
+                              style={{
+                                width: `${Math.min(100, (instanceCount / Math.max(plan.max_instances, 1)) * 100)}%`,
+                              }}
+                            />
+                          ) : null}
+                        </div>
+                        <div className="mt-0.5 text-[10px] text-subtle">Agents attached: {agentCount}</div>
                       </div>
                       <div>
                         <div className="mb-0.5 text-[10px] uppercase tracking-wide text-subtle">Storage</div>

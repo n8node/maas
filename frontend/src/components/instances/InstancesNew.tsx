@@ -409,7 +409,9 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
       chunking: { chunk_size_tokens: chunkSize, overlap_tokens: chunkOverlap },
       features: { hierarchical_clustering: hierarchicalClustering },
     };
-  }, [
+  },
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- graph/working config flows through hook .toConfig() identities
+  [
     biTemporalEnabled,
     chunkOverlap,
     chunkSize,

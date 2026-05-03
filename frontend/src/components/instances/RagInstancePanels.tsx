@@ -20,24 +20,15 @@ import {
   type RAGTopicClusterDTO,
   type RAGSourceDTO,
 } from "@/lib/api";
-import { getToken } from "@/lib/token";
-import { formatFileSize, formatTokens } from "@/lib/format";
+import { MemoryTypePillsRow } from "@/components/instances/MemoryTypePillsRow";
 import { WikiHighlightedSnippet } from "@/components/instances/WikiHighlightedSnippet";
+import { formatFileSize, formatTokens } from "@/lib/format";
+import { getToken } from "@/lib/token";
 
 type RagTab = "playground" | "documents" | "topics" | "settings";
 
 const ragAccent = "#185fa5";
 const ragAccentBg = "#e6f1fb";
-
-const MEMORY_PILLS = [
-  { id: "rag", label: "RAG", href: "#", col: "#185fa5", bg: "#e6f1fb", soon: false },
-  { id: "wiki", label: "Wiki", href: "/instances/new?type=wiki", col: "#534ab7", bg: "#eeedfe", soon: false },
-  { id: "episodic", label: "Episodic", href: "/instances/new?type=episodic", col: "#3b6d11", bg: "#eaf3de", soon: false },
-  { id: "working", label: "Working", href: "/instances/new?type=working", col: "#854f0b", bg: "#faeeda", soon: false },
-  { id: "graph", label: "Graph", href: "/instances/new?type=graph", col: "#993c1d", bg: "#faece7", soon: false },
-  { id: "reflective", label: "Reflective", href: "#", col: "#993556", bg: "#fbeaf0", soon: true },
-  { id: "agent", label: "Agent (unified)", href: "#", col: "#1a1a1a", bg: "#f3f2ef", soon: true },
-] as const;
 
 function formatRelativeTime(iso: string | undefined): string {
   if (!iso) return "—";
@@ -305,45 +296,7 @@ export function RagInstancePanels({
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-bg3">
       <div className="border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
-        <div className="flex flex-wrap gap-2">
-          {MEMORY_PILLS.map((p) => {
-            const active = p.id === "rag";
-            if (p.soon) {
-              return (
-                <span
-                  key={p.id}
-                  title="Coming soon"
-                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-border bg-bg2 px-3 py-1.5 text-[12px] text-muted opacity-60"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-border2" aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
-            if (active) {
-              return (
-                <span
-                  key={p.id}
-                  className="inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[12px] font-medium text-ink shadow-sm"
-                  style={{ borderColor: p.col, backgroundColor: p.bg }}
-                >
-                  <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.col }} aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
-            return (
-              <Link
-                key={p.id}
-                href={p.href}
-                className="inline-flex items-center gap-1.5 rounded-full border border-border bg-bg px-3 py-1.5 text-[12px] text-muted transition-colors hover:border-border2 hover:bg-bg2 hover:text-ink"
-              >
-                <span className="h-1.5 w-1.5 rounded-full opacity-40" style={{ backgroundColor: p.col }} aria-hidden />
-                {p.label}
-              </Link>
-            );
-          })}
-        </div>
+        <MemoryTypePillsRow activeId="rag" hoverStyle="rag" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
