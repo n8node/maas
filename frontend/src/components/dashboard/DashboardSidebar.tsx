@@ -33,6 +33,7 @@ type Props = {
   planLabel: string;
   /** Shown next to Instances until API exists. */
   instanceCount?: number;
+  agentCount?: number;
   /** Show link to /superadmin (superadmin users only). */
   isSuperadmin?: boolean;
   onLogout?: () => void;
@@ -42,6 +43,7 @@ export function DashboardSidebar({
   userEmail,
   planLabel,
   instanceCount = 0,
+  agentCount = 0,
   isSuperadmin,
   onLogout,
 }: Props) {
@@ -49,6 +51,9 @@ export function DashboardSidebar({
   const homeActive = pathname === "/";
   const billingActive = pathname === "/billing";
   const instancesActive = pathname === "/instances" || pathname.startsWith("/instances/");
+  const agentsActive = pathname === "/agents" || pathname.startsWith("/agents/");
+  const apiKeysActive = pathname === "/api-keys";
+  const docsActive = pathname === "/docs/quickstart";
 
   return (
     <aside className="fixed left-0 top-0 z-20 flex h-screen w-[220px] shrink-0 flex-col border-r border-border bg-bg">
@@ -78,18 +83,37 @@ export function DashboardSidebar({
             {instanceCount}
           </span>
         </Link>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
+        <Link
+          href="/agents"
+          className={clsx(
+            "mt-1 flex items-center gap-2 rounded-md px-3 py-[7px] text-muted no-underline hover:bg-bg2 hover:text-ink",
+            agentsActive && "bg-bg2 font-medium text-ink",
+          )}
+        >
           Agents
-          <BadgeSoon />
-        </span>
+          <span className="ml-auto flex h-5 min-w-[20px] items-center justify-center rounded-full bg-bg2 px-1.5 text-[10px] font-semibold text-muted">
+            {agentCount}
+          </span>
+        </Link>
         <div className="px-3 pb-1 pt-3 text-[10px] font-medium uppercase tracking-[0.08em] text-subtle">Developer</div>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
-          API Keys
-        </span>
-        <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
+        <Link
+          href="/api-keys"
+          className={clsx(
+            "flex items-center gap-2 rounded-md px-3 py-[7px] text-muted no-underline hover:bg-bg2 hover:text-ink",
+            apiKeysActive && "bg-bg2 font-medium text-ink",
+          )}
+        >
+          API keys
+        </Link>
+        <Link
+          href="/docs/quickstart"
+          className={clsx(
+            "flex items-center gap-2 rounded-md px-3 py-[7px] text-muted no-underline hover:bg-bg2 hover:text-ink",
+            docsActive && "bg-bg2 font-medium text-ink",
+          )}
+        >
           Docs
-          <BadgeSoon />
-        </span>
+        </Link>
         <span className="flex cursor-not-allowed items-center gap-2 rounded-md px-3 py-[7px] text-muted opacity-80">
           Webhooks
         </span>

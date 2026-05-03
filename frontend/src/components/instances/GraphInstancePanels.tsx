@@ -19,7 +19,7 @@ const MEMORY_PILLS = [
   { id: "working", label: "Working", href: "/instances/new?type=working", col: "#854f0b", bg: "#faeeda", soon: false },
   { id: "graph", label: "Graph", href: "#", col: gCol, bg: gBg, soon: false },
   { id: "reflective", label: "Reflective", href: "#", col: "#993556", bg: "#fbeaf0", soon: true },
-  { id: "agent", label: "Agent (unified)", href: "#", col: "#1a1a1a", bg: "#f3f2ef", soon: true },
+  { id: "agent", label: "Agent (unified)", href: "/agents", col: "#1a1a1a", bg: "#f3f2ef", soon: false },
 ] as const;
 
 const MOCK_ENTITIES = [
@@ -311,22 +311,17 @@ export function GraphInstancePanels({
 
   return (
     <div className="flex min-h-0 w-full min-w-0 flex-1 flex-col bg-bg3">
+      <div className="border-b border-border bg-accent-bg px-4 py-3 text-[12px] leading-relaxed text-accent sm:px-6 lg:px-7">
+        <strong className="font-medium text-ink">Demo UI only:</strong>{" "}
+        <span className="text-muted">
+          Graph memory ingest/query and traverse are not wired to production handlers yet — actions here do not mutate a real knowledge graph backend.
+          Use Agents or Wiki/RAG flows for backed APIs today.
+        </span>
+      </div>
       <div className="border-b border-border bg-bg px-4 py-3 sm:px-6 lg:px-7">
         <div className="flex flex-wrap gap-2">
           {MEMORY_PILLS.map((p) => {
             const active = p.id === "graph";
-            if (p.soon) {
-              return (
-                <span
-                  key={p.id}
-                  title="Coming soon"
-                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-border bg-bg2 px-3 py-1.5 text-[12px] text-muted opacity-60"
-                >
-                  <span className="h-1.5 w-1.5 rounded-full bg-border2" aria-hidden />
-                  {p.label}
-                </span>
-              );
-            }
             if (active) {
               return (
                 <span
@@ -335,6 +330,18 @@ export function GraphInstancePanels({
                   style={{ borderColor: p.col, backgroundColor: p.bg }}
                 >
                   <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.col }} aria-hidden />
+                  {p.label}
+                </span>
+              );
+            }
+            if (p.soon) {
+              return (
+                <span
+                  key={p.id}
+                  title="Coming soon"
+                  className="inline-flex cursor-not-allowed items-center gap-1.5 rounded-full border border-border bg-bg2 px-3 py-1.5 text-[12px] text-muted opacity-60"
+                >
+                  <span className="h-1.5 w-1.5 rounded-full bg-border2" aria-hidden />
                   {p.label}
                 </span>
               );

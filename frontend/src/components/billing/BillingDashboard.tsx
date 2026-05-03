@@ -8,9 +8,11 @@ import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
 import {
   billingMeRequest,
   cancelSubscription,
+  listAgents,
   listInstances,
   listPlans,
   listTokenPackages,
+  purchaseTokenPackage,
   subscribePlan,
   type BillingMeData,
   type MeUser,
@@ -45,6 +47,10 @@ function paymentTypeLabel(t: string): string {
       return "Subscription";
     case "package":
       return "Package";
+    case "token_package":
+      return "Token package";
+    case "manual":
+      return "Manual payment";
     case "top_up":
       return "Top-up";
     default:
@@ -82,6 +88,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
   const [plans, setPlans] = useState<PlanDTO[]>([]);
   const [packages, setPackages] = useState<TokenPackageDTO[]>([]);
   const [instanceCount, setInstanceCount] = useState(0);
+  const [agentCount, setAgentCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
   const [actionErr, setActionErr] = useState<string | null>(null);
@@ -90,6 +97,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
 
   const [buyOpen, setBuyOpen] = useState(false);
   const [buyPkg, setBuyPkg] = useState<TokenPackageDTO | null>(null);
+  const [buyBusy, setBuyBusy] = useState(false);
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelAtEnd, setCancelAtEnd] = useState(true);
 
@@ -109,10 +117,15 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
       setPlans(p.sort((a, b) => a.sort_order - b.sort_order));
       setPackages(pk.sort((a, b) => a.sort_order - b.sort_order));
       try {
-        const inst = await listInstances(token);
-        setInstanceCount(inst.length);
+        const [inst, ag] = await Promise.all([
+          listInstances(token).catch(() => []),
+          listAgents(token).catch(() => []),
+        ]);
+        setInstanceCount(Array.isArray(inst) ? inst.length : 0);
+        setAgentCount(Array.isArray(ag) ? ag.length : 0);
       } catch {
         setInstanceCount(0);
+        setAgentCount(0);
       }
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Failed to load billing");
@@ -183,6 +196,21 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
     }
   }
 
+  async function onConfirmPackagePurchase() {
+    if (!token || !buyPkg) return;
+    setBuyBusy(true);
+    setActionErr(null);
+    try {
+      await purchaseTokenPackage(token, buyPkg.id);
+      await load();
+      setBuyOpen(false);
+    } catch (e) {
+      setActionErr(e instanceof Error ? e.message : "Could not purchase package");
+    } finally {
+      setBuyBusy(false);
+    }
+  }
+
   const cheapest = packages[0];
   const pkgSavingPct = (pkg: TokenPackageDTO) => {
     if (!cheapest || cheapest.tokens <= 0 || pkg.tokens <= 0) return null;
@@ -205,6 +233,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
           userEmail={user.email}
           planLabel={planLabel}
           instanceCount={instanceCount}
+          agentCount={agentCount}
           isSuperadmin={user.role === "superadmin"}
           onLogout={onLogout}
         />
@@ -222,6 +251,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
           userEmail={user.email}
           planLabel={planLabel}
           instanceCount={instanceCount}
+          agentCount={agentCount}
           isSuperadmin={user.role === "superadmin"}
           onLogout={onLogout}
         />
@@ -238,12 +268,13 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
   return (
     <div className="min-h-screen bg-bg3 pl-[220px]">
       <DashboardSidebar
-          userEmail={user.email}
-          planLabel={planLabel}
-          instanceCount={instanceCount}
-          isSuperadmin={user.role === "superadmin"}
-          onLogout={onLogout}
-        />
+        userEmail={user.email}
+        planLabel={planLabel}
+        instanceCount={instanceCount}
+        agentCount={agentCount}
+        isSuperadmin={user.role === "superadmin"}
+        onLogout={onLogout}
+      />
 
       <div className="ml-0 flex min-h-screen flex-1 flex-col">
         <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">
@@ -696,10 +727,49 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
 
           {tab === "usage" && (
             <section>
-              <h2 className="mb-3.5 text-[13px] font-medium text-ink">Token usage</h2>
-              <div className="rounded-lg border border-border bg-bg p-6 text-sm text-muted">
-                Usage breakdown (by memory type, model, and operation) will appear here in a later release.
-              </div>
+              <h2 className="mb-3.5 text-[13px] font-medium text-ink">Token buckets</h2>
+              <p className="mb-3 text-[11px] leading-relaxed text-subtle">
+                Subscription balance is consumed first, then oldest purchase buckets (FIFO). Per-operation model breakdown will appear later.
+              </p>
+              {buckets.length === 0 ? (
+                <div className="rounded-lg border border-border bg-bg px-4 py-8 text-center text-sm text-muted">No buckets yet.</div>
+              ) : (
+                <div className="overflow-hidden rounded-lg border border-border bg-bg">
+                  <div
+                    className="grid gap-2 border-b border-border bg-bg2 px-4 py-2 text-[10px] font-medium uppercase tracking-wide text-subtle"
+                    style={{ gridTemplateColumns: "140px 1fr 120px 120px 140px 1fr" }}
+                  >
+                    <div>Type</div>
+                    <div>Allocated</div>
+                    <div>Used</div>
+                    <div>Remaining</div>
+                    <div>Expires</div>
+                    <div>Id</div>
+                  </div>
+                  {buckets.map((b) => (
+                    <div
+                      key={b.id}
+                      className="grid gap-2 border-b border-border px-4 py-2.5 text-xs last:border-0 hover:bg-bg2"
+                      style={{ gridTemplateColumns: "140px 1fr 120px 120px 140px 1fr" }}
+                    >
+                      <div className="font-medium text-ink capitalize">{b.bucket_type.replace(/_/g, " ")}</div>
+                      <div className="tabular-nums text-muted">{formatTokens(b.tokens_total)}</div>
+                      <div className="tabular-nums text-muted">{formatTokens(b.tokens_used)}</div>
+                      <div className="tabular-nums text-ink">{formatTokens(b.tokens_remaining)}</div>
+                      <div className="text-muted">
+                        {b.expires_at
+                          ? new Date(b.expires_at).toLocaleDateString("en-GB", {
+                              day: "numeric",
+                              month: "short",
+                              year: "numeric",
+                            })
+                          : "—"}
+                      </div>
+                      <div className="min-w-0 truncate font-mono text-[10px] text-subtle">{b.id}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </section>
           )}
         </div>
@@ -720,33 +790,33 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
               Buy {buyPkg ? `${formatTokens(buyPkg.tokens)} token package` : "tokens"}
             </h3>
             <p className="mt-1 text-xs leading-relaxed text-muted">
-              Tokens are added to your balance after payment is confirmed. FIFO: subscription tokens are used first.
+              Tokens credit immediately after confirmation (manual settlement MVP — no external payment gateway in this release).
             </p>
             {buyPkg ? (
               <div className="mt-4 rounded-lg bg-bg2 px-3 py-2.5 text-[11px] leading-relaxed text-muted">
-                <strong className="text-ink">{formatRub(buyPkg.price_rub)}</strong> — manual payment for now. After confirmation,
-                tokens will be credited within 24 hours.
+                <strong className="text-ink">{formatRub(buyPkg.price_rub)}</strong> · {formatTokens(buyPkg.tokens)} tokens recorded as a completed purchase for your workspace.
               </div>
             ) : null}
             <div className="mt-4">
-              <label className="mb-1 block text-xs text-muted">Email for payment details</label>
+              <label className="mb-1 block text-xs text-muted">Account email</label>
               <input readOnly className="h-[34px] w-full rounded-lg border border-border2 bg-bg px-3 text-[13px]" value={user.email} />
             </div>
-            <p className="mt-3 text-[11px] text-subtle">Bank transfer or card — our team will contact you.</p>
             <div className="mt-5 flex justify-end gap-2">
               <button
                 type="button"
                 onClick={() => setBuyOpen(false)}
-                className="rounded-lg border border-border2 px-4 py-2 text-xs text-muted hover:bg-bg2"
+                disabled={buyBusy}
+                className="rounded-lg border border-border2 px-4 py-2 text-xs text-muted hover:bg-bg2 disabled:opacity-50"
               >
-                Close
+                Cancel
               </button>
               <button
                 type="button"
-                onClick={() => setBuyOpen(false)}
-                className="rounded-lg bg-ink px-4 py-2 text-xs font-medium text-bg hover:opacity-90"
+                disabled={buyBusy || !buyPkg}
+                onClick={() => void onConfirmPackagePurchase()}
+                className="rounded-lg bg-ink px-4 py-2 text-xs font-medium text-bg hover:opacity-90 disabled:opacity-60"
               >
-                Request invoice
+                {buyBusy ? "Applying…" : "Confirm purchase"}
               </button>
             </div>
           </div>

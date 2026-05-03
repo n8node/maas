@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -178,6 +179,39 @@ func (h *Billing) Consume(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+type purchasePkgBody struct {
+	PackageID string `json:"package_id"`
+}
+
+// PurchasePackage self-serve MVP: completes payment and credits purchase bucket (no external PSP).
+func (h *Billing) PurchasePackage(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteError(w, http.StatusMethodNotAllowed, "METHOD_NOT_ALLOWED", http.StatusText(http.StatusMethodNotAllowed))
+		return
+	}
+	p, ok := auth.PrincipalFromContext(r.Context())
+	if !ok {
+		WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "missing authentication")
+		return
+	}
+	var body purchasePkgBody
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		WriteError(w, http.StatusBadRequest, "INVALID_JSON", "invalid json body")
+		return
+	}
+	pid, err := uuid.Parse(strings.TrimSpace(body.PackageID))
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", "invalid package_id")
+		return
+	}
+	payID, err := h.svc.PurchaseTokenPackage(r.Context(), p.UserID, pid)
+	if err != nil {
+		WriteError(w, http.StatusBadRequest, "VALIDATION_ERROR", err.Error())
+		return
+	}
+	WriteJSON(w, http.StatusCreated, map[string]any{"data": map[string]any{"payment_id": payID.String()}})
 }
 
 type BillingAdmin struct {

@@ -6,7 +6,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-import { billingMeRequest, listInstances, type BillingMeData, type MeUser } from "@/lib/api";
+import { billingMeRequest, listAgents, listInstances, type BillingMeData, type MeUser } from "@/lib/api";
 import { formatRub, formatStorageGb, formatTokens } from "@/lib/format";
 import { getToken } from "@/lib/token";
 
@@ -25,9 +25,6 @@ function planUsageBarClass(pct: number): string {
   return "bg-success";
 }
 
-/** Until storage API exists. */
-const STORAGE_USED_MB_PLACEHOLDER = 0;
-
 type Props = {
   user: MeUser;
   onLogout: () => void;
@@ -36,6 +33,7 @@ type Props = {
 export function OverviewDashboard({ user, onLogout }: Props) {
   const token = getToken() ?? "";
   const [instanceCount, setInstanceCount] = useState(0);
+  const [agentCount, setAgentCount] = useState(0);
   const [billing, setBilling] = useState<BillingMeData | null>(null);
   const [loading, setLoading] = useState(true);
   const [err, setErr] = useState<string | null>(null);
@@ -50,10 +48,15 @@ export function OverviewDashboard({ user, onLogout }: Props) {
       setErr(e instanceof Error ? e.message : "Could not load usage");
     }
     try {
-      const inst = await listInstances(token);
-      setInstanceCount(inst.length);
+      const [inst, ag] = await Promise.all([
+        listInstances(token),
+        listAgents(token).catch(() => []),
+      ]);
+      setInstanceCount(Array.isArray(inst) ? inst.length : 0);
+      setAgentCount(Array.isArray(ag) ? ag.length : 0);
     } catch {
       setInstanceCount(0);
+      setAgentCount(0);
     } finally {
       setLoading(false);
     }
@@ -80,8 +83,6 @@ export function OverviewDashboard({ user, onLogout }: Props) {
   const instancesDisplayCap = instancesCap >= 100000 ? "∞" : instancesCap;
   const storageCapMb = plan?.max_storage_mb ?? 0;
   const storageCapLabel = storageCapMb > 0 ? formatStorageGb(storageCapMb) : "—";
-  const storageUsedPct =
-    storageCapMb > 0 ? Math.min(100, Math.round((STORAGE_USED_MB_PLACEHOLDER / storageCapMb) * 100)) : 0;
 
   const localPart = user.email.split("@")[0] ?? user.email;
   const isSuperadmin = user.role === "superadmin";
@@ -92,6 +93,7 @@ export function OverviewDashboard({ user, onLogout }: Props) {
         userEmail={user.email}
         planLabel={planLabel}
         instanceCount={instanceCount}
+        agentCount={agentCount}
         isSuperadmin={isSuperadmin}
         onLogout={onLogout}
       />
@@ -100,14 +102,13 @@ export function OverviewDashboard({ user, onLogout }: Props) {
         <header className="sticky top-0 z-10 flex h-[52px] items-center justify-between border-b border-border bg-bg px-7">
           <span className="text-[15px] font-medium text-ink">Overview</span>
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              title="Documentation coming soon"
+            <Link
+              href="/docs/quickstart"
               className="inline-flex items-center gap-1.5 rounded-lg border border-border2 bg-bg px-3 py-1.5 text-[12px] text-ink hover:bg-bg2"
             >
               <BookOpen className="h-3.5 w-3.5 text-muted" strokeWidth={1.75} aria-hidden />
               Docs
-            </button>
+            </Link>
             <Link
               href="/instances/new"
               className="inline-flex items-center gap-1.5 rounded-lg bg-ink px-3 py-1.5 text-[12px] font-medium text-bg hover:opacity-90"
@@ -210,16 +211,11 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                   </div>
 
                   <div className="rounded-lg border border-border bg-bg p-4">
-                    <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Storage cap</div>
+                    <div className="text-[10px] font-medium uppercase tracking-wide text-subtle">Storage</div>
                     <div className="mt-1 text-2xl font-medium tracking-tight text-ink">{storageCapLabel}</div>
                     <p className="mt-1 text-[12px] text-subtle">
-                      {STORAGE_USED_MB_PLACEHOLDER} MB used · {plan?.slug === "free" || !plan ? "free plan" : "your plan"}
+                      Dashboard does not aggregate bytes used yet — only plan limits apply in billing. Contact support if you need a snapshot.
                     </p>
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="rounded-md bg-success-bg px-2 py-0.5 text-[10px] font-medium text-success-text">
-                        {storageCapMb > 0 ? `${storageUsedPct}% used` : "0% used"}
-                      </span>
-                    </div>
                   </div>
                 </div>
               </section>
@@ -233,18 +229,24 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                   >
                     Billing &amp; usage
                   </Link>
-                  <span className="cursor-not-allowed rounded-full border border-border2 px-4 py-2 text-[12px] text-subtle">
-                    API Keys
-                  </span>
+                  <Link
+                    href="/api-keys"
+                    className="rounded-full border border-border2 px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2"
+                  >
+                    API keys
+                  </Link>
                   <Link
                     href="/instances/new"
                     className="rounded-full border border-border2 px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg2"
                   >
                     New instance
                   </Link>
-                  <span className="cursor-not-allowed rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-subtle">
-                    Docs (soon)
-                  </span>
+                  <Link
+                    href="/docs/quickstart"
+                    className="rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] font-medium text-ink hover:bg-bg"
+                  >
+                    Quick start
+                  </Link>
                   <Link
                     href="/instances"
                     className="rounded-full border border-border2 bg-bg2 px-4 py-2 text-[12px] text-ink hover:bg-bg"
@@ -310,9 +312,9 @@ export function OverviewDashboard({ user, onLogout }: Props) {
                       <div>
                         <div className="text-[13px] font-medium text-ink">Issue an API key</div>
                         <p className="mt-0.5 text-[12px] text-muted">Connect your backend or agents securely using a scoped API key.</p>
-                        <span className="mt-1.5 inline-block cursor-not-allowed text-[12px] font-medium text-accent opacity-50">
-                          Go to API Keys →
-                        </span>
+                        <Link href="/api-keys" className="mt-1.5 inline-block text-[12px] font-medium text-accent hover:underline">
+                          Go to API keys →
+                        </Link>
                       </div>
                     </li>
                     <li className="flex gap-3">

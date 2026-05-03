@@ -4,7 +4,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 
 import { DashboardSidebar } from "@/components/dashboard/DashboardSidebar";
-import { billingMeRequest, listInstances, type MeUser } from "@/lib/api";
+import { billingMeRequest, listAgents, listInstances, type MeUser } from "@/lib/api";
 import { getToken } from "@/lib/token";
 
 type Props = {
@@ -21,13 +21,18 @@ export function InstancesShell({ user, onLogout, title, headerRight, omitHeader,
   const token = getToken() ?? "";
   const pathname = usePathname();
   const [instanceCount, setInstanceCount] = useState(0);
+  const [agentCount, setAgentCount] = useState(0);
   const [planLabel, setPlanLabel] = useState("Free plan");
 
   useEffect(() => {
     if (!token) return;
-    listInstances(token)
-      .then((list) => setInstanceCount(list.length))
-      .catch(() => setInstanceCount(0));
+    Promise.all([
+      listInstances(token).catch(() => []),
+      listAgents(token).catch(() => []),
+    ]).then(([list, agents]) => {
+      setInstanceCount(Array.isArray(list) ? list.length : 0);
+      setAgentCount(Array.isArray(agents) ? agents.length : 0);
+    });
   }, [token, pathname]);
 
   useEffect(() => {
@@ -43,6 +48,7 @@ export function InstancesShell({ user, onLogout, title, headerRight, omitHeader,
         userEmail={user.email ?? ""}
         planLabel={planLabel}
         instanceCount={instanceCount}
+        agentCount={agentCount}
         isSuperadmin={user.role === "superadmin"}
         onLogout={onLogout}
       />

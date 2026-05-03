@@ -583,6 +583,31 @@ func nullIfEmpty(s string) *string {
 	return &s
 }
 
+// PurchaseTokenPackage records a completed package payment for the authenticated user,
+// increments their purchase-token bucket via RecordManualPayment. price_rub on the catalog
+// row is interpreted as whole rubles; stored payment amount_kopecks = price_rub * 100.
+func (s *Service) PurchaseTokenPackage(ctx context.Context, userID, packageID uuid.UUID) (uuid.UUID, error) {
+	var priceRub int
+	var active bool
+	err := s.pool.QueryRow(ctx, `SELECT price_rub, is_active FROM token_packages WHERE id = $1`, packageID).Scan(&priceRub, &active)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("package: %w", err)
+	}
+	if !active {
+		return uuid.Nil, fmt.Errorf("package is not active")
+	}
+	if priceRub < 0 {
+		return uuid.Nil, fmt.Errorf("invalid package price")
+	}
+	pid := packageID
+	return s.RecordManualPayment(ctx, ManualPaymentInput{
+		UserID:        userID,
+		PackageID:     &pid,
+		AmountKopecks: priceRub * 100,
+		Notes:         "Token package (dashboard purchase)",
+	})
+}
+
 // MarshalMetadata helper for payments list - skip for MVP
 
 func (s *Service) ListPaymentsUser(ctx context.Context, userID uuid.UUID, limit int) ([]paymentRow, error) {

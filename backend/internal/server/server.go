@@ -13,6 +13,7 @@ import (
 	"github.com/n8node/maas/backend/internal/config"
 	"github.com/n8node/maas/backend/internal/handler"
 	"github.com/n8node/maas/backend/internal/memory"
+	"github.com/n8node/maas/backend/internal/agent"
 	appmw "github.com/n8node/maas/backend/internal/middleware"
 	"github.com/n8node/maas/backend/internal/openrouter"
 	"github.com/n8node/maas/backend/internal/repository"
@@ -64,9 +65,11 @@ func New(opts Options) http.Handler {
 		memOpts = append(memOpts, memory.WithGardenerModels(gt, gr))
 	}
 	memSvc := memory.NewService(opts.Pool, bill, memOpts...)
+	agentSvc := agent.NewService(opts.Pool, memSvc)
 	instH := handler.NewInstances(memSvc)
 	wikiH := handler.NewWiki(memSvc)
 	ragH := handler.NewRag(memSvc)
+	agentsH := handler.NewAgents(agentSvc)
 	authDeps := appmw.AuthDeps{Cfg: opts.Config, Users: userRepo, Keys: keyRepo}
 	authRoute := appmw.Authenticate(authDeps)
 
@@ -88,7 +91,19 @@ func New(opts Options) http.Handler {
 		r.With(authRoute).Get("/billing/me", billH.Me)
 		r.With(authRoute).Post("/billing/subscribe", billH.Subscribe)
 		r.With(authRoute).Post("/billing/cancel", billH.Cancel)
-		r.With(authRoute).Post("/billing/consume", billH.Consume)
+		r.With(authRoute).Post("/billing/purchase-package", billH.PurchasePackage)
+
+		r.With(authRoute).Route("/agents", func(r chi.Router) {
+			r.Get("/", agentsH.List)
+			r.Post("/", agentsH.Create)
+			r.Get("/{id}", agentsH.Get)
+			r.Patch("/{id}", agentsH.Patch)
+			r.Delete("/{id}", agentsH.Delete)
+			r.Post("/{id}/layers", agentsH.AddLayer)
+			r.Delete("/{id}/layers/{instanceId}", agentsH.RemoveLayer)
+			r.Post("/{id}/query", agentsH.Query)
+			r.Post("/{id}/ingest", agentsH.Ingest)
+		})
 
 		r.With(authRoute).Route("/instances", func(r chi.Router) {
 			r.Get("/", instH.List)
@@ -102,6 +117,7 @@ func New(opts Options) http.Handler {
 			r.Get("/{id}/wiki/sources", wikiH.Sources)
 			r.Get("/{id}/wiki/concepts/{conceptId}", wikiH.GetConcept)
 			r.Get("/{id}/wiki/concepts", wikiH.Concepts)
+			r.Get("/{id}/wiki/action-log", wikiH.ActionLog)
 			r.Patch("/{id}/wiki/concepts/{conceptId}", wikiH.PatchConcept)
 			r.Get("/{id}/wiki/gardener/repair", wikiH.RepairConcepts)
 			r.Get("/{id}/wiki/gardener/proposals", wikiH.Proposals)

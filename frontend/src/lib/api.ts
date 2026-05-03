@@ -251,6 +251,227 @@ export async function adminDeletePlan(token: string, id: string): Promise<void> 
   }
 }
 
+export type ApiKeyDTO = {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at?: string;
+};
+
+export async function listApiKeys(token: string): Promise<ApiKeyDTO[]> {
+  const res = await fetch(`${API_BASE}/api-keys`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data?: { api_keys?: ApiKeyDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load API keys");
+  }
+  return data.data?.api_keys ?? [];
+}
+
+export type CreatedApiKeyDTO = {
+  id: string;
+  name: string;
+  key: string;
+  key_prefix: string;
+  created_at: string;
+};
+
+export async function createApiKey(token: string, name: string): Promise<CreatedApiKeyDTO> {
+  const res = await fetch(`${API_BASE}/api-keys`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name }),
+  });
+  const data = (await parseJson(res)) as { data?: { api_key?: CreatedApiKeyDTO } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not create key");
+  }
+  const k = data.data?.api_key;
+  if (!k?.key) {
+    throw new Error("Invalid key response");
+  }
+  return k;
+}
+
+export async function deleteApiKey(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api-keys/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not revoke key");
+  }
+}
+
+export async function purchaseTokenPackage(token: string, packageId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/billing/purchase-package`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ package_id: packageId }),
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not purchase package");
+  }
+}
+
+export type AgentLayerDTO = {
+  instance_id: string;
+  memory_type: string;
+  name: string;
+  role: string;
+  priority: number;
+  enabled: boolean;
+};
+
+export type AgentDTO = {
+  id: string;
+  name: string;
+  description: string;
+  config: Record<string, unknown>;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  layers?: AgentLayerDTO[];
+};
+
+export async function listAgents(token: string): Promise<AgentDTO[]> {
+  const res = await fetch(`${API_BASE}/agents`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data?: { agents?: AgentDTO[] } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load agents");
+  }
+  return Array.isArray(data.data?.agents) ? data.data!.agents! : [];
+}
+
+export async function createAgent(token: string, name: string, description?: string): Promise<string> {
+  const res = await fetch(`${API_BASE}/agents`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ name, description: description ?? "" }),
+  });
+  const data = (await parseJson(res)) as { data?: { agent_id?: string } } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not create agent");
+  }
+  const id = data.data?.agent_id;
+  if (!id) throw new Error("Invalid agent response");
+  return id;
+}
+
+export async function getAgent(token: string, id: string): Promise<AgentDTO> {
+  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  const data = (await parseJson(res)) as { data?: AgentDTO } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Could not load agent");
+  }
+  const raw = data.data;
+  if (!raw || typeof raw !== "object") {
+    throw new Error("Invalid agent response");
+  }
+  return raw;
+}
+
+export async function deleteAgent(token: string, id: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not delete agent");
+  }
+}
+
+export async function addAgentLayer(
+  token: string,
+  agentId: string,
+  body: { instance_id: string; role: string; priority: number },
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(agentId)}/layers`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not attach instance");
+  }
+}
+
+export async function removeAgentLayer(token: string, agentId: string, instanceId: string): Promise<void> {
+  const res = await fetch(
+    `${API_BASE}/agents/${encodeURIComponent(agentId)}/layers/${encodeURIComponent(instanceId)}`,
+    {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${token}` },
+    },
+  );
+  if (!res.ok) {
+    const data = (await parseJson(res)) as Partial<ApiErrBody>;
+    throw new Error(data.error?.message ?? "Could not detach instance");
+  }
+}
+
+export async function agentQuery(
+  token: string,
+  agentId: string,
+  body: { query: string; top_k?: number; user_id?: string; session_id?: string },
+): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(agentId)}/query`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await parseJson(res)) as { data?: unknown } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Query failed");
+  }
+  return data.data;
+}
+
+export async function ingestViaAgent(
+  token: string,
+  agentId: string,
+  body: Record<string, unknown>,
+): Promise<unknown> {
+  const res = await fetch(`${API_BASE}/agents/${encodeURIComponent(agentId)}/ingest`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(body),
+  });
+  const data = (await parseJson(res)) as { data?: unknown } & Partial<ApiErrBody>;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? "Ingest failed");
+  }
+  return data.data;
+}
+
 export type MemoryInstanceDTO = {
   id: string;
   name: string;

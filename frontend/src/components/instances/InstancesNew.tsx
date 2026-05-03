@@ -81,13 +81,6 @@ const MEMORY_TYPES: Array<{
     col: "#854f0b",
     desc: "Short-term key-value store with TTL",
   },
-  {
-    id: "graph",
-    name: "Graph",
-    bg: "#faece7",
-    col: "#993c1d",
-    desc: "Entities and typed relations (Apache AGE)",
-  },
 ];
 
 /** Default model ids stored in instance config; runtime follows server settings. */
@@ -278,8 +271,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     requestedType === "rag" ||
     requestedType === "wiki" ||
     requestedType === "episodic" ||
-    requestedType === "working" ||
-    requestedType === "graph"
+    requestedType === "working"
       ? requestedType
       : "wiki";
 
@@ -349,12 +341,17 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
 
   useEffect(() => {
     const t = searchParams.get("type");
-    if (t === "rag" || t === "wiki" || t === "episodic" || t === "working" || t === "graph") {
+    if (t === "rag" || t === "wiki" || t === "episodic" || t === "working") {
       setMemoryType(t);
       setStep(1);
       if (t === "episodic") setName("Coach Bot History");
       if (t === "working") setName("Session Context");
-      if (t === "graph") setName("Product Entity Graph");
+      return;
+    }
+    if (t === "graph") {
+      setMemoryType("wiki");
+      setStep(1);
+      setName("Product Knowledge Base");
     }
   }, [searchParams]);
 
@@ -519,7 +516,7 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
     }
   }
 
-  const typeMeta = MEMORY_TYPES.find((t) => t.id === memoryType)!;
+  const typeMeta = MEMORY_TYPES.find((t) => t.id === memoryType) ?? MEMORY_TYPES[0];
 
   function planAllowsMemoryType(id: MemoryKind): boolean {
     const allowed = billing?.plan?.allowed_memory_types;
@@ -661,7 +658,6 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                           setStep(1);
                           if (t.id === "working") setName("Session Context");
                           else if (t.id === "episodic") setName("Coach Bot History");
-                          else if (t.id === "graph") setName("Product Entity Graph");
                           else setName("Product Knowledge Base");
                         }}
                         className={clsx(
@@ -695,6 +691,21 @@ export function InstancesNew({ user, onLogout }: { user: MeUser; onLogout?: () =
                       </button>
                     );
                   })}
+                  <div
+                    className="relative rounded-[12px] border border-dashed border-border2 bg-bg2/80 p-3.5 text-left"
+                    aria-hidden={false}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px]" style={{ background: "#faece7" }}>
+                        <span className="h-3.5 w-3.5 rounded-full" style={{ background: "#993c1d" }} />
+                      </div>
+                      <span className="rounded bg-bg px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-muted">Coming soon</span>
+                    </div>
+                    <div className="text-[13px] font-medium text-ink">Graph memory</div>
+                    <div className="mt-1 text-[11px] leading-snug text-subtle">
+                      Entity graph ingest, traverse, and repair are not connected to the API in this build. The dashboard playground below is an interaction mock only.
+                    </div>
+                  </div>
                 </div>
               </>
             ) : null}
