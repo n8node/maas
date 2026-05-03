@@ -7,6 +7,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/n8node/maas/backend/internal/billing"
 )
 
 const ragSynthMaxPassageRunes = 1200
@@ -15,7 +17,7 @@ const ragSynthMaxPassageRunes = 1200
 // On success returns assistant text and token cost for the LLM call only.
 // Returns ("", 0, nil) when chat is not configured or passages are empty.
 // Returns ("", 0, err) on LLM failure; if the model returns only whitespace, returns ("", tok, nil) with tok billed.
-func (s *Service) ragSynthesizeAnswer(ctx context.Context, userID uuid.UUID, question string, cites []Citation) (string, int64, error) {
+func (s *Service) ragSynthesizeAnswer(ctx context.Context, userID, instanceID uuid.UUID, question string, cites []Citation) (string, int64, error) {
 	if s.chat == nil || len(cites) == 0 {
 		return "", 0, nil
 	}
@@ -59,7 +61,12 @@ Rules:
 	if tok < 1 {
 		tok = 1
 	}
-	if err := s.bill.ConsumeTokens(ctx, userID, tok); err != nil {
+	instPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tok, &billing.UsageLedger{
+		Operation:  "synthesis",
+		InstanceID: &instPtr,
+		MemoryType: "rag",
+	}); err != nil {
 		return "", 0, err
 	}
 	return strings.TrimSpace(out), tok, nil

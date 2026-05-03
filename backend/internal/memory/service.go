@@ -372,7 +372,12 @@ func (s *Service) ingestRAG(ctx context.Context, userID, instanceID uuid.UUID, i
 		return nil, err
 	}
 
-	if err := s.bill.ConsumeTokens(ctx, userID, totalTok); err != nil {
+	instPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, totalTok, &billing.UsageLedger{
+		Operation:  "ingest",
+		InstanceID: &instPtr,
+		MemoryType: "rag",
+	}); err != nil {
 		for _, cid := range inserted {
 			_, _ = s.pool.Exec(ctx, `DELETE FROM rag_chunks WHERE id = $1`, cid)
 		}
@@ -448,7 +453,12 @@ func (s *Service) queryRAG(ctx context.Context, userID, instanceID uuid.UUID, in
 	if tokCost < 50 {
 		tokCost = 50
 	}
-	if err := s.bill.ConsumeTokens(ctx, userID, tokCost); err != nil {
+	qInstPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tokCost, &billing.UsageLedger{
+		Operation:  "query",
+		InstanceID: &qInstPtr,
+		MemoryType: "rag",
+	}); err != nil {
 		return nil, err
 	}
 
@@ -562,7 +572,7 @@ func (s *Service) queryRAG(ctx context.Context, userID, instanceID uuid.UUID, in
 			retrievalHint = "vector similarity"
 		}
 		if wantSynth && s.chat != nil {
-			ans, synthTok, err := s.ragSynthesizeAnswer(ctx, userID, q, cites)
+			ans, synthTok, err := s.ragSynthesizeAnswer(ctx, userID, instanceID, q, cites)
 			switch {
 			case err == nil && ans != "":
 				msg = ans

@@ -735,10 +735,47 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
           )}
 
           {tab === "usage" && (
-            <section>
+            <section className="space-y-8">
+              <div>
+                <h2 className="mb-3.5 text-[13px] font-medium text-ink">Recent token usage</h2>
+                <p className="mb-3 text-[11px] leading-relaxed text-subtle">
+                  Aggregated billed operations over the last {billing.usage_breakdown_recent?.days ?? 30} days (internal token units).
+                </p>
+                {!billing.usage_breakdown_recent?.rows?.length ? (
+                  <div className="rounded-lg border border-border bg-bg px-4 py-8 text-center text-xs text-muted">
+                    No usage logged yet — run ingest or query on a memory instance after deployment with usage tracking enabled.
+                  </div>
+                ) : (
+                  <div className="overflow-hidden rounded-lg border border-border bg-bg">
+                    <div
+                      className="grid gap-2 border-b border-border bg-bg2 px-4 py-2 text-[10px] font-medium uppercase tracking-wide text-subtle"
+                      style={{ gridTemplateColumns: "100px 1fr 110px 80px" }}
+                    >
+                      <div>Type</div>
+                      <div>Operation</div>
+                      <div className="text-right">Tokens</div>
+                      <div className="text-right">Events</div>
+                    </div>
+                    {(billing.usage_breakdown_recent?.rows ?? []).map((row, idx) => (
+                      <div
+                        key={`${row.memory_type}-${row.operation}-${idx}`}
+                        className="grid gap-2 border-b border-border px-4 py-2.5 text-xs last:border-0 hover:bg-bg2"
+                        style={{ gridTemplateColumns: "100px 1fr 110px 80px" }}
+                      >
+                        <div className="font-medium capitalize text-ink">{row.memory_type.trim() ? row.memory_type : "—"}</div>
+                        <div className="break-all text-muted">{row.operation}</div>
+                        <div className="text-right tabular-nums text-ink">{formatTokens(row.tokens)}</div>
+                        <div className="text-right tabular-nums text-muted">{row.events}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div>
               <h2 className="mb-3.5 text-[13px] font-medium text-ink">Token buckets</h2>
               <p className="mb-3 text-[11px] leading-relaxed text-subtle">
-                Subscription balance is consumed first, then oldest purchase buckets (FIFO). Per-operation model breakdown will appear later.
+                Subscription balance is consumed first, then oldest purchase buckets (FIFO).
               </p>
               {buckets.length === 0 ? (
                 <div className="rounded-lg border border-border bg-bg px-4 py-8 text-center text-sm text-muted">No buckets yet.</div>
@@ -779,6 +816,7 @@ export function BillingDashboard({ user, onLogout }: { user: MeUser; onLogout?: 
                   ))}
                 </div>
               )}
+              </div>
             </section>
           )}
         </div>

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -142,7 +143,23 @@ func (s *Service) GardenerEnabledForUser(ctx context.Context, userID uuid.UUID) 
 	return enabled, nil
 }
 
+// UsageLedger is appended to usage_events inside the same transaction as token debiting.
+type UsageLedger struct {
+	Operation  string     // stable code, e.g. ingest, query, synthesis
+	InstanceID *uuid.UUID // nullable for non-instance drains
+	MemoryType string     // rag, wiki, episodic, ...
+}
+
 func (s *Service) ConsumeTokens(ctx context.Context, userID uuid.UUID, amount int64) error {
+	return s.consumeTokens(ctx, userID, amount, nil)
+}
+
+// ConsumeTokensWithUsage records a usage_events row after a successful debit when ledger.Operation is non-empty.
+func (s *Service) ConsumeTokensWithUsage(ctx context.Context, userID uuid.UUID, amount int64, ledger *UsageLedger) error {
+	return s.consumeTokens(ctx, userID, amount, ledger)
+}
+
+func (s *Service) consumeTokens(ctx context.Context, userID uuid.UUID, amount int64, ledger *UsageLedger) error {
 	if amount <= 0 {
 		return fmt.Errorf("amount must be positive")
 	}
@@ -193,7 +210,57 @@ func (s *Service) ConsumeTokens(ctx context.Context, userID uuid.UUID, amount in
 		}
 		remaining -= take
 	}
+	if ledger != nil {
+		op := strings.TrimSpace(ledger.Operation)
+		if op != "" {
+			mt := strings.TrimSpace(ledger.MemoryType)
+			_, err := tx.Exec(ctx, `
+				INSERT INTO usage_events (user_id, operation, tokens, memory_instance_id, memory_type)
+				VALUES ($1, $2, $3, $4, $5)`,
+				userID, op, amount, ledger.InstanceID, mt)
+			if err != nil {
+				return err
+			}
+		}
+	}
 	return tx.Commit(ctx)
+}
+
+type UsageBreakdownRow struct {
+	MemoryType string `json:"memory_type"`
+	Operation  string `json:"operation"`
+	Tokens     int64  `json:"tokens"`
+	EventCount int64  `json:"events"`
+}
+
+// UsageBreakdownSince aggregates billed usage_events by memory type and operation for the authenticated user.
+func (s *Service) UsageBreakdownSince(ctx context.Context, userID uuid.UUID, since time.Time, limit int) ([]UsageBreakdownRow, error) {
+	if limit <= 0 || limit > 200 {
+		limit = 100
+	}
+	rows, err := s.pool.Query(ctx, `
+		SELECT COALESCE(trim(memory_type), '') AS mt,
+		       operation,
+		       SUM(tokens)::bigint,
+		       COUNT(*)::bigint
+		FROM usage_events
+		WHERE user_id = $1 AND created_at >= $2
+		GROUP BY 1, 2
+		ORDER BY SUM(tokens) DESC NULLS LAST
+		LIMIT $3`, userID, since.UTC(), limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []UsageBreakdownRow
+	for rows.Next() {
+		var r UsageBreakdownRow
+		if err := rows.Scan(&r.MemoryType, &r.Operation, &r.Tokens, &r.EventCount); err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
 }
 
 type Summary struct {

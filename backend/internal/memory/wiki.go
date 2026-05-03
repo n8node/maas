@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/models"
 )
 
@@ -184,7 +185,12 @@ func (s *Service) ingestWiki(ctx context.Context, userID uuid.UUID, inst *models
 		extractNote = "Concept extraction skipped: chat model unavailable (configure LLM API access on the server)."
 	}
 
-	if err := s.bill.ConsumeTokens(ctx, userID, totalTok+llmTok); err != nil {
+	instPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, totalTok+llmTok, &billing.UsageLedger{
+		Operation:  "ingest",
+		InstanceID: &instPtr,
+		MemoryType: "wiki",
+	}); err != nil {
 		_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_concepts WHERE source_id = $1`, srcID)
 		_, _ = s.pool.Exec(ctx, `DELETE FROM wiki_sources WHERE id = $1`, srcID)
 		return nil, err
@@ -223,7 +229,12 @@ func (s *Service) queryWiki(ctx context.Context, userID, instanceID uuid.UUID, i
 	if tokCost < 50 {
 		tokCost = 50
 	}
-	if err := s.bill.ConsumeTokens(ctx, userID, tokCost); err != nil {
+	instPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tokCost, &billing.UsageLedger{
+		Operation:  "query",
+		InstanceID: &instPtr,
+		MemoryType: "wiki",
+	}); err != nil {
 		return nil, err
 	}
 

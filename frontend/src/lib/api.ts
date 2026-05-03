@@ -108,12 +108,24 @@ export type PaymentDTO = {
   notes?: string | null;
 };
 
+export type UsageBreakdownRowDTO = {
+  memory_type: string;
+  operation: string;
+  tokens: number;
+  events: number;
+};
+
 export type BillingMeData = {
   tokens_remaining: number;
   plan?: PlanDTO;
   subscription?: SubscriptionDTO;
   buckets: BucketDTO[];
   payments: PaymentDTO[];
+  usage_breakdown_recent?: {
+    days: number;
+    since: string;
+    rows: UsageBreakdownRowDTO[];
+  };
 };
 
 export async function billingMeRequest(token: string): Promise<BillingMeData> {

@@ -223,7 +223,12 @@ If nothing is needed, return [].`
 		tok = 1
 	}
 	_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
-	if err := s.bill.ConsumeTokens(ctx, userID, tok); err != nil {
+	iid := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tok, &billing.UsageLedger{
+		Operation:  "gardener_triage",
+		InstanceID: &iid,
+		MemoryType: "wiki",
+	}); err != nil {
 		return 0, 0, err
 	}
 
@@ -447,7 +452,12 @@ func (s *Service) wikiSynthesizeMergedDescription(ctx context.Context, userID, i
 		tok = 1
 	}
 	_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
-	if err := s.bill.ConsumeTokens(ctx, userID, tok); err != nil {
+	iidRef := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tok, &billing.UsageLedger{
+		Operation:  "gardener_refactor",
+		InstanceID: &iidRef,
+		MemoryType: "wiki",
+	}); err != nil {
 		return nil
 	}
 	out = strings.TrimSpace(out)

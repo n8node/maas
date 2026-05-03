@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -78,10 +79,26 @@ func (h *Billing) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pay, _ := h.svc.ListPaymentsUser(r.Context(), p.UserID, 20)
+	since := time.Now().UTC().AddDate(0, 0, -30)
+	usageRows, _ := h.svc.UsageBreakdownSince(r.Context(), p.UserID, since, 100)
+	usageList := make([]map[string]any, 0, len(usageRows))
+	for _, row := range usageRows {
+		usageList = append(usageList, map[string]any{
+			"memory_type": row.MemoryType,
+			"operation":   row.Operation,
+			"tokens":      row.Tokens,
+			"events":      row.EventCount,
+		})
+	}
 	data := map[string]any{
 		"tokens_remaining": sum.TokensLeft,
 		"buckets":          sum.Buckets,
 		"payments":         pay,
+		"usage_breakdown_recent": map[string]any{
+			"days":  30,
+			"since": since.Format(time.RFC3339Nano),
+			"rows":  usageList,
+		},
 	}
 	if sum.Subscription != nil {
 		data["subscription"] = map[string]any{
@@ -169,7 +186,8 @@ func (h *Billing) Consume(w http.ResponseWriter, r *http.Request) {
 		WriteError(w, http.StatusBadRequest, "INVALID_JSON", "invalid json body")
 		return
 	}
-	err := h.svc.ConsumeTokens(r.Context(), p.UserID, body.Amount)
+	err := h.svc.ConsumeTokensWithUsage(r.Context(), p.UserID, body.Amount,
+		&billing.UsageLedger{Operation: "manual_consume"})
 	if errors.Is(err, billing.ErrTokensExhausted) {
 		WriteError(w, http.StatusPaymentRequired, "TOKENS_EXHAUSTED", "insufficient tokens")
 		return

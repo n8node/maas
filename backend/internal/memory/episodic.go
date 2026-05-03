@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/models"
 )
 
@@ -84,7 +85,12 @@ func (s *Service) ingestEpisodic(
 	}
 	_ = s.bill.EnsureWelcomeSubscription(ctx, userID)
 	tokCost := estimateTokens(text)
-	if err := s.bill.ConsumeTokens(ctx, userID, tokCost); err != nil {
+	instPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tokCost, &billing.UsageLedger{
+		Operation:  "ingest",
+		InstanceID: &instPtr,
+		MemoryType: "episodic",
+	}); err != nil {
 		return nil, err
 	}
 	validFrom := in.ValidFrom
@@ -130,7 +136,12 @@ func (s *Service) queryEpisodic(
 	if tokCost < 40 {
 		tokCost = 40
 	}
-	if err := s.bill.ConsumeTokens(ctx, userID, tokCost); err != nil {
+	instPtr := instanceID
+	if err := s.bill.ConsumeTokensWithUsage(ctx, userID, tokCost, &billing.UsageLedger{
+		Operation:  "query",
+		InstanceID: &instPtr,
+		MemoryType: "episodic",
+	}); err != nil {
 		return nil, err
 	}
 

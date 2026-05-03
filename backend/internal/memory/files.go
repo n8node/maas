@@ -12,6 +12,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/n8node/maas/backend/internal/billing"
 	"github.com/n8node/maas/backend/internal/models"
 )
 
@@ -153,7 +154,12 @@ func (s *Service) IngestFile(ctx context.Context, userID, instanceID uuid.UUID, 
 			return nil, err
 		}
 
-		if err := s.bill.ConsumeTokens(ctx, userID, totalTok); err != nil {
+		instPtr := instanceID
+		if err := s.bill.ConsumeTokensWithUsage(ctx, userID, totalTok, &billing.UsageLedger{
+			Operation:  "ingest",
+			InstanceID: &instPtr,
+			MemoryType: "rag",
+		}); err != nil {
 			for _, cid := range inserted {
 				_, _ = s.pool.Exec(ctx, `DELETE FROM rag_chunks WHERE id = $1`, cid)
 			}
